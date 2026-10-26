@@ -28,7 +28,7 @@ func do(t *testing.T, h http.Handler, method, path string) (*httptest.ResponseRe
 }
 
 func TestHealthz(t *testing.T) {
-	rec, body := do(t, NewRouter(discardLogger()), http.MethodGet, "/healthz")
+	rec, body := do(t, NewRouter(discardLogger(), API{}), http.MethodGet, "/healthz")
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", rec.Code)
 	}
@@ -38,7 +38,7 @@ func TestHealthz(t *testing.T) {
 }
 
 func TestHealthzRejectsOtherMethods(t *testing.T) {
-	rec, _ := do(t, NewRouter(discardLogger()), http.MethodPost, "/healthz")
+	rec, _ := do(t, NewRouter(discardLogger(), API{}), http.MethodPost, "/healthz")
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want 405", rec.Code)
 	}
@@ -62,7 +62,7 @@ func TestReadyz(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			rec, body := do(t, NewRouter(discardLogger(), tt.checks...), http.MethodGet, "/readyz")
+			rec, body := do(t, NewRouter(discardLogger(), API{}, tt.checks...), http.MethodGet, "/readyz")
 			if rec.Code != tt.wantCode {
 				t.Fatalf("status = %d, want %d", rec.Code, tt.wantCode)
 			}
@@ -83,7 +83,7 @@ func TestReadyz(t *testing.T) {
 
 func TestReadyzDoesNotLeakErrorDetails(t *testing.T) {
 	bad := ReadinessCheck{Name: "db", Check: func(context.Context) error { return errors.New("password=hunter2") }}
-	rec, _ := do(t, NewRouter(discardLogger(), bad), http.MethodGet, "/readyz")
+	rec, _ := do(t, NewRouter(discardLogger(), API{}, bad), http.MethodGet, "/readyz")
 	if got := rec.Body.String(); strings.Contains(got, "hunter2") {
 		t.Fatalf("response leaks check error: %s", got)
 	}
@@ -101,7 +101,7 @@ func TestRecoverPanics(t *testing.T) {
 }
 
 func TestUnknownRoute(t *testing.T) {
-	rec, _ := do(t, NewRouter(discardLogger()), http.MethodGet, "/nope")
+	rec, _ := do(t, NewRouter(discardLogger(), API{}), http.MethodGet, "/nope")
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rec.Code)
 	}

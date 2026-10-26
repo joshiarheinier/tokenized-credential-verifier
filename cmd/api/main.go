@@ -30,7 +30,11 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := app.New(cfg, logger).Run(ctx); err != nil {
+	a, err := app.New(cfg, logger)
+	if err != nil {
+		return err
+	}
+	if err := a.Run(ctx); err != nil {
 		logger.Error("api exited with error", "error", err)
 		return err
 	}

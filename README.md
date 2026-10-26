@@ -7,9 +7,9 @@ user's identity documents.
 
 Full design: [`docs/td_init_project.md`](docs/td_init_project.md).
 
-**Current status: Phase 0** — Go service skeleton (config, structured logging,
-HTTP server with health/readiness endpoints). No credential logic or on-chain
-program yet.
+**Current status: Phase 1** — off-chain credential MVP: simulated KYC, signed
+Ed25519 credentials, and a verification endpoint. Nothing depends on a
+blockchain yet; the Solana registry arrives in Phases 2-3.
 
 ## Requirements
 
@@ -91,6 +91,13 @@ variable.
 | `HTTP_SHUTDOWN_TIMEOUT` | `15s` | Grace period for in-flight requests on shutdown |
 | `LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 | `LOG_FORMAT` | `json` | `json` (machine) or `text` (human) |
+| `ISSUER_ID` | `did:example:issuer-dev` | Issuer identifier placed in the `iss` claim |
+| `ISSUER_SIGNING_KEY_SEED` | *(empty)* | Base64url 32-byte Ed25519 seed (**secret**). Empty = ephemeral key (non-production only). Required in production. |
+| `CREDENTIAL_TTL` | `720h` | Validity period of issued credentials |
+| `KYC_SIMULATION_ENABLED` | `true` (`false` in production) | Enables the simulate/issue endpoints. The process refuses to start with this on in production. |
+
+Generate an issuer signing seed with `go run ./cmd/issuerkeygen` (the seed is
+printed to stdout, the public key and key id to stderr).
 
 ## HTTP endpoints
 
@@ -98,6 +105,42 @@ variable.
 |---|---|---|
 | `GET` | `/healthz` | Liveness: the process is up. Never checks dependencies. |
 | `GET` | `/readyz` | Readiness: runs registered dependency checks (none yet; PostgreSQL and Solana RPC will be added). Returns `503` with per-check `ok`/`fail` if any fails; error details are logged, not returned. |
+
+### Credential endpoints (Phase 1)
+
+| Method | Path | Description |
+|---|---|---|
+| `POST` | `/v1/kyc/simulate` | **Dev only.** Records a simulated KYC decision. Body: `{"subject","outcome":"approved"\|"rejected","over_18","country"}` (country = ISO alpha-2, required when approved). Returns `201 {"kyc_result_id"}`. |
+| `POST` | `/v1/credentials` | **Dev only.** Body: `{"kyc_result_id"}`. Issues a credential for an approved result, **once** (`404` unknown, `422` rejected, `409` already used). Returns `201 {"credential","expires_at"}`. |
+| `POST` | `/v1/credentials/verify` | Body: `{"credential"}`. Always `200` for a well-formed request: `{"valid":true,"issuer","credential_type","expires_at","claims"}` or `{"valid":false,"reason"}`. |
+
+Verification `reason` codes: `malformed`, `unsupported`, `untrusted_issuer`,
+`invalid_signature`, `expired`, `not_yet_valid`, `policy_not_satisfied`. The
+subject and credential id are not returned to the verifying application.
+
+Try it:
+
+```sh
+ID=$(curl -s localhost:8080/v1/kyc/simulate -d '{"subject":"user-1","outcome":"approved","over_18":true,"country":"ID"}' | sed 's/.*"kyc_result_id":"\([^"]*\)".*/\1/')
+CRED=$(curl -s localhost:8080/v1/credentials -d "{\"kyc_result_id\":\"$ID\"}" | sed 's/.*"credential":"\([^"]*\)".*/\1/')
+curl -s localhost:8080/v1/credentials/verify -d "{\"credential\":\"$CRED\"}"
+```
+
+### Credential format
+
+A compact JWS (`header.payload.signature`, base64url without padding) signed
+with Ed25519 (`alg=EdDSA`), carrying a JWT-style claim set with a `ver`
+(format version, currently `1`) claim. It mirrors the shape of a W3C
+Verifiable Credential but **does not claim W3C conformance**. The verifier
+accepts only `EdDSA`, looks up the key by `kid` among trusted issuer keys,
+checks the signature *before* reading claims, rejects unknown fields,
+unsupported versions/types, expired or not-yet-valid credentials, and
+credentials whose `iss` does not match the key's issuer. Claims are coarse
+(`kyc_verified`, `over_18`, `country`); no names, birthdates or documents.
+
+Phase 1 limitations: the simulated KYC store is in memory (lost on restart),
+and the verifier trusts only this process's own issuer key. Issuer trust moves
+to the Solana registry in later phases.
 
 ## Project layout
 
@@ -107,6 +150,11 @@ internal/app/         Wires dependencies; owns server lifecycle and graceful shu
 internal/config/      Environment-variable configuration with validation
 internal/httpapi/     Router, middleware (request logging, panic recovery), handlers
 internal/logging/     slog logger construction
+internal/credential/  Credential model, Ed25519 signer, verifier, issuing service (no chain dependency)
+internal/issuer/      Issuer identity and signing-key loading
+internal/identity/    Simulated KYC decisions (dev only, in memory)
+internal/verification/ Acceptance policy and coarse rejection reasons
+cmd/issuerkeygen/     Generates an issuer signing seed
 docs/                 Technical design
 ```
 

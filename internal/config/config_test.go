@@ -32,11 +32,12 @@ func TestLoadDefaults(t *testing.T) {
 
 func TestLoadOverrides(t *testing.T) {
 	cfg, err := Load(env(map[string]string{
-		"APP_ENV":           "production",
-		"HTTP_ADDR":         "127.0.0.1:9000",
-		"HTTP_READ_TIMEOUT": "3s",
-		"LOG_LEVEL":         "debug",
-		"LOG_FORMAT":        "TEXT",
+		"APP_ENV":                 "production",
+		"ISSUER_SIGNING_KEY_SEED": "seed",
+		"HTTP_ADDR":               "127.0.0.1:9000",
+		"HTTP_READ_TIMEOUT":       "3s",
+		"LOG_LEVEL":               "debug",
+		"LOG_FORMAT":              "TEXT",
 	}))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -70,5 +71,38 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 		if !strings.Contains(err.Error(), key) {
 			t.Errorf("error %q does not mention %s", err, key)
 		}
+	}
+}
+
+func TestLoadIssuerAndKYCDefaults(t *testing.T) {
+	cfg, err := Load(env(nil))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Issuer.ID == "" || cfg.Issuer.CredentialTTL != 30*24*time.Hour {
+		t.Errorf("Issuer = %+v", cfg.Issuer)
+	}
+	if !cfg.KYC.SimulationEnabled {
+		t.Error("simulation should default to enabled in development")
+	}
+}
+
+func TestLoadProductionGuards(t *testing.T) {
+	_, err := Load(env(map[string]string{"APP_ENV": "production", "KYC_SIMULATION_ENABLED": "true"}))
+	if err == nil {
+		t.Fatal("want error for simulation + missing seed in production")
+	}
+	for _, key := range []string{"KYC_SIMULATION_ENABLED", "ISSUER_SIGNING_KEY_SEED"} {
+		if !strings.Contains(err.Error(), key) {
+			t.Errorf("error %q does not mention %s", err, key)
+		}
+	}
+
+	cfg, err := Load(env(map[string]string{"APP_ENV": "production", "ISSUER_SIGNING_KEY_SEED": "x"}))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.KYC.SimulationEnabled {
+		t.Error("simulation must default to disabled in production")
 	}
 }

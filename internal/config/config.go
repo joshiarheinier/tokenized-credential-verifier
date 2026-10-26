@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -20,9 +21,28 @@ const (
 
 // Config is the complete runtime configuration of the API process.
 type Config struct {
-	Env  Environment
-	HTTP HTTPConfig
-	Log  LogConfig
+	Env    Environment
+	HTTP   HTTPConfig
+	Log    LogConfig
+	Issuer IssuerConfig
+	KYC    KYCConfig
+}
+
+// IssuerConfig identifies the credential issuer and its signing key.
+type IssuerConfig struct {
+	ID string
+	// SigningKeySeed is the base64url-encoded 32-byte Ed25519 seed. It is a
+	// secret: never log it. Empty means "generate an ephemeral key", which is
+	// only allowed outside production.
+	SigningKeySeed string
+	CredentialTTL  time.Duration
+}
+
+// KYCConfig controls the simulated KYC flow.
+type KYCConfig struct {
+	// SimulationEnabled exposes the simulated KYC and issuance endpoints.
+	// It must never be enabled in production.
+	SimulationEnabled bool
 }
 
 // HTTPConfig controls the HTTP server.
@@ -59,7 +79,13 @@ func Load(getenv func(string) string) (Config, error) {
 			Level:  l.level("LOG_LEVEL", slog.LevelInfo),
 			Format: strings.ToLower(l.str("LOG_FORMAT", "json")),
 		},
+		Issuer: IssuerConfig{
+			ID:             l.str("ISSUER_ID", "did:example:issuer-dev"),
+			SigningKeySeed: l.str("ISSUER_SIGNING_KEY_SEED", ""),
+			CredentialTTL:  l.duration("CREDENTIAL_TTL", 30*24*time.Hour),
+		},
 	}
+	cfg.KYC.SimulationEnabled = l.boolean("KYC_SIMULATION_ENABLED", cfg.Env != EnvProduction)
 
 	switch cfg.Env {
 	case EnvDevelopment, EnvTest, EnvProduction:
@@ -70,6 +96,15 @@ func Load(getenv func(string) string) (Config, error) {
 	case "json", "text":
 	default:
 		l.fail("LOG_FORMAT", cfg.Log.Format, "must be json or text")
+	}
+
+	if cfg.Env == EnvProduction {
+		if cfg.KYC.SimulationEnabled {
+			l.fail("KYC_SIMULATION_ENABLED", "true", "simulated KYC must not be enabled in production")
+		}
+		if cfg.Issuer.SigningKeySeed == "" {
+			l.fail("ISSUER_SIGNING_KEY_SEED", "", "required in production")
+		}
 	}
 
 	if len(l.errs) > 0 {
@@ -105,6 +140,19 @@ func (l *loader) duration(key string, def time.Duration) time.Duration {
 		return def
 	}
 	return d
+}
+
+func (l *loader) boolean(key string, def bool) bool {
+	raw := strings.TrimSpace(l.getenv(key))
+	if raw == "" {
+		return def
+	}
+	b, err := strconv.ParseBool(raw)
+	if err != nil {
+		l.fail(key, raw, "must be true or false")
+		return def
+	}
+	return b
 }
 
 func (l *loader) level(key string, def slog.Level) slog.Level {

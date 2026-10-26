@@ -23,10 +23,12 @@ func TestServeAndGracefulShutdown(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	a, err := New(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
 	done := make(chan error, 1)
-	go func() {
-		done <- New(cfg, slog.New(slog.NewTextHandler(io.Discard, nil))).Serve(ctx, ln)
-	}()
+	go func() { done <- a.Serve(ctx, ln) }()
 
 	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get("http://" + ln.Addr().String() + "/healthz")
