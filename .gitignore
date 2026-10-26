@@ -1,0 +1,33 @@
+# --- Secrets: never commit ---------------------------------------------------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+# Solana keypairs (solana-keygen output, Anchor wallets, program keypairs)
+*-keypair.json
+id.json
+keys/
+secrets/
+
+# --- Go ----------------------------------------------------------------------
+/bin/
+/dist/
+*.exe
+*.test
+*.out
+coverage.*
+
+# --- Rust / Anchor (contracts/) ----------------------------------------------
+target/
+.anchor/
+test-ledger/
+node_modules/
+
+# --- Editors / OS ------------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
