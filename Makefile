@@ -5,7 +5,7 @@ export
 GO      ?= go
 BIN_DIR ?= bin
 
-.PHONY: help run build test test-race cover lint fmt tidy clean
+.PHONY: help run build test test-race cover lint fmt tidy clean anchor-build anchor-test
 
 help: ## List targets
 	@grep -E '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*## "}{printf "  %-10s %s\n",$$1,$$2}'
@@ -39,3 +39,10 @@ tidy: ## Tidy go.mod/go.sum
 
 clean: ## Remove build artifacts
 	rm -rf $(BIN_DIR) coverage.out
+
+# Anchor lives in WSL (see contracts/kyc-registry/scripts/anchor-wsl.sh).
+anchor-build: ## Build the Anchor program (via WSL)
+	wsl -e bash -ic 'cd contracts/kyc-registry && ./scripts/anchor-wsl.sh build'
+
+anchor-test: anchor-build ## Run Anchor tests on a local validator (via WSL)
+	wsl -e bash -ic 'cd contracts/kyc-registry && ./scripts/anchor-wsl.sh test --skip-build --validator legacy'
