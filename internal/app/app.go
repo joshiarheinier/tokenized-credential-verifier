@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/joshia/tokenized-identity-kyc/internal/config"
 	"github.com/joshia/tokenized-identity-kyc/internal/credential"
@@ -16,6 +17,7 @@ import (
 	"github.com/joshia/tokenized-identity-kyc/internal/identity"
 	"github.com/joshia/tokenized-identity-kyc/internal/issuer"
 	"github.com/joshia/tokenized-identity-kyc/internal/verification"
+	"github.com/joshia/tokenized-identity-kyc/pkg/connector/blockchain"
 )
 
 // App is the assembled API application.
@@ -60,14 +62,43 @@ func buildAPI(cfg config.Config, logger *slog.Logger) (httpapi.API, error) {
 		return httpapi.API{}, fmt.Errorf("issuer: %w", err)
 	}
 
+	var (
+		chain      *blockchain.Client
+		verifyOpts []verification.Option
+		issueOpts  []credential.ServiceOption
+	)
+	if cfg.Solana.RPCURL != "" {
+		if chain, err = blockchain.NewClient(blockchain.Config{
+			RPCURL:                   cfg.Solana.RPCURL,
+			ProgramID:                cfg.Solana.ProgramID,
+			Commitment:               cfg.Solana.Commitment,
+			RegistryAuthorityKeypair: cfg.Solana.RegistryAuthorityKeypair,
+			IssuerAuthorityKeypair:   cfg.Solana.IssuerAuthorityKeypair,
+			RequestTimeout:           cfg.Solana.RequestTimeout,
+			TxTimeout:                cfg.Solana.TxTimeout,
+		}); err != nil {
+			return httpapi.API{}, err
+		}
+		verifyOpts = append(verifyOpts, verification.WithBlockchainClient(chain))
+		issueOpts = append(issueOpts, credential.WithBlockchainClient(chain))
+		logger.Info("on-chain registry enabled", "rpc_url", cfg.Solana.RPCURL, "program_id", cfg.Solana.ProgramID, "commitment", cfg.Solana.Commitment)
+		if cfg.Solana.Bootstrap {
+			if err := bootstrapRegistry(chain, iss, cfg.Solana.TxTimeout, logger); err != nil {
+				return httpapi.API{}, err
+			}
+		}
+	} else {
+		logger.Warn("SOLANA_RPC_URL not set: credentials are verified off-chain only, with no issuer trust or revocation check")
+	}
+
 	verifier := credential.NewVerifier(nil)
 	verifier.Trust(iss.ID, iss.Signer.PublicKey())
-	api := httpapi.API{CredentialVerification: verification.NewService(verifier, verification.DefaultPolicy)}
+	api := httpapi.API{CredentialVerification: verification.NewService(verifier, verification.DefaultPolicy, verifyOpts...)}
 
 	if cfg.KYC.SimulationEnabled {
 		logger.Warn("simulated KYC is enabled: for local development only")
 		kyc := identity.NewService()
-		issuing, err := credential.NewService(iss.Signer, kyc, cfg.Issuer.CredentialTTL, nil)
+		issuing, err := credential.NewService(iss.Signer, kyc, cfg.Issuer.CredentialTTL, nil, issueOpts...)
 		if err != nil {
 			return httpapi.API{}, err
 		}
@@ -111,5 +142,27 @@ func (a *App) Serve(ctx context.Context, ln net.Listener) error {
 		return fmt.Errorf("http server: %w", err)
 	}
 	a.logger.Info("http server stopped")
+	return nil
+}
+
+// bootstrapRegistry makes sure the registry exists and this process's issuer is
+// registered. Every step is idempotent, so it is safe on every start. It is a
+// development convenience; config.Load refuses it in production.
+func bootstrapRegistry(chain *blockchain.Client, iss *issuer.Issuer, txTimeout time.Duration, logger *slog.Logger) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*txTimeout)
+	defer cancel()
+
+	if _, err := chain.InitializeRegistry(ctx); err != nil {
+		return fmt.Errorf("bootstrap registry: %w", err)
+	}
+	authority, err := chain.IssuerAuthority()
+	if err != nil {
+		return fmt.Errorf("bootstrap registry: %w", err)
+	}
+	res, err := chain.RegisterIssuer(ctx, blockchain.IssuerID(iss.ID), iss.Signer.PublicKey(), authority)
+	if err != nil {
+		return fmt.Errorf("bootstrap registry: register issuer: %w", err)
+	}
+	logger.Warn("registry bootstrap enabled: for local development only", "issuer", iss.ID, "issuer_registered_now", res.Changed)
 	return nil
 }

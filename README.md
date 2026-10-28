@@ -71,6 +71,8 @@ go run ./cmd/api
 | `make cover` | `go test -coverprofile=...` | Coverage report |
 | `make lint` | `gofmt -l .` + `go vet ./...` | Format check and vet |
 | `make fmt` | `gofmt -w .` | Format code |
+| `make anchor-build` / `anchor-test` | via WSL | Build / test the Anchor program |
+| `make integration-test` | `scripts/integration-test.sh` | Go integration tests against a local validator |
 
 On Windows, Make is available via WSL, MSYS2 (`pacman -S make`), or
 `winget install GnuWin32.Make`. It is optional.
@@ -95,6 +97,14 @@ variable.
 | `ISSUER_SIGNING_KEY_SEED` | *(empty)* | Base64url 32-byte Ed25519 seed (**secret**). Empty = ephemeral key (non-production only). Required in production. |
 | `CREDENTIAL_TTL` | `720h` | Validity period of issued credentials |
 | `KYC_SIMULATION_ENABLED` | `true` (`false` in production) | Enables the simulate/issue endpoints. The process refuses to start with this on in production. |
+| `SOLANA_RPC_URL` | *(empty)* | RPC endpoint of the registry cluster. Empty = off-chain checks only (non-production). **Required in production.** |
+| `SOLANA_PROGRAM_ID` | *(empty)* | Deployed registry program id. Required with `SOLANA_RPC_URL`. |
+| `SOLANA_COMMITMENT` | `confirmed` | `confirmed` or `finalized` (used for reads and confirming writes) |
+| `SOLANA_REGISTRY_AUTHORITY_KEYPAIR` | *(empty)* | Path to the registry authority keypair (**secret**). Only for administration/bootstrap. |
+| `SOLANA_ISSUER_AUTHORITY_KEYPAIR` | *(empty)* | Path to the issuer authority keypair (**secret**). Needed to register issued credentials on chain. |
+| `SOLANA_REQUEST_TIMEOUT` | `10s` | Timeout of a single RPC call |
+| `SOLANA_TX_TIMEOUT` | `30s` | How long to wait for a submitted transaction to confirm |
+| `SOLANA_BOOTSTRAP` | `false` | Dev/test only: create the registry and register this issuer at startup (idempotent). Needs both keypairs and a fixed `ISSUER_SIGNING_KEY_SEED`. Refused in production. |
 
 Generate an issuer signing seed with `go run ./cmd/issuerkeygen` (the seed is
 printed to stdout, the public key and key id to stderr).
@@ -112,10 +122,11 @@ printed to stdout, the public key and key id to stderr).
 |---|---|---|
 | `POST` | `/v1/kyc/simulate` | **Dev only.** Records a simulated KYC decision. Body: `{"subject","outcome":"approved"\|"rejected","over_18","country"}` (country = ISO alpha-2, required when approved). Returns `201 {"kyc_result_id"}`. |
 | `POST` | `/v1/credentials` | **Dev only.** Body: `{"kyc_result_id"}`. Issues a credential for an approved result, **once** (`404` unknown, `422` rejected, `409` already used). Returns `201 {"credential","expires_at"}`. |
-| `POST` | `/v1/credentials/verify` | Body: `{"credential"}`. Always `200` for a well-formed request: `{"valid":true,"issuer","credential_type","expires_at","claims"}` or `{"valid":false,"reason"}`. |
+| `POST` | `/v1/credentials/verify` | Body: `{"credential"}`. `200` for a well-formed request: `{"valid":true,"issuer","credential_type","expires_at","claims"}` or `{"valid":false,"reason"}`. `503` with `{"valid":false,"reason":"verification_unavailable"}` when the on-chain registry could not be read (the credential is not accepted). |
 
 Verification `reason` codes: `malformed`, `unsupported`, `untrusted_issuer`,
-`invalid_signature`, `expired`, `not_yet_valid`, `policy_not_satisfied`. The
+`invalid_signature`, `expired`, `not_yet_valid`, `policy_not_satisfied`, and with
+the registry enabled `not_registered`, `revoked`, `verification_unavailable`. The
 subject and credential id are not returned to the verifying application.
 
 Try it:
@@ -138,9 +149,9 @@ unsupported versions/types, expired or not-yet-valid credentials, and
 credentials whose `iss` does not match the key's issuer. Claims are coarse
 (`kyc_verified`, `over_18`, `country`); no names, birthdates or documents.
 
-Phase 1 limitations: the simulated KYC store is in memory (lost on restart),
-and the verifier trusts only this process's own issuer key. Issuer trust moves
-to the Solana registry in later phases.
+Limitations: the simulated KYC store is in memory (lost on restart),
+and the verifier's local key set is only this process's own issuer key (the
+registry is checked on top of it, but does not yet supply other issuers' keys).
 
 ## Project layout
 
@@ -153,13 +164,15 @@ internal/logging/     slog logger construction
 internal/credential/  Credential model, Ed25519 signer, verifier, issuing service (no chain dependency)
 internal/issuer/      Issuer identity and signing-key loading
 internal/identity/    Simulated KYC decisions (dev only, in memory)
-internal/verification/ Acceptance policy and coarse rejection reasons
+internal/verification/ Acceptance policy, on-chain checks and coarse rejection reasons
+pkg/connector/blockchain/ Connector to the Solana registry program (only package importing the SDK; no dependency on internal/)
+contracts/kyc-registry/ Anchor program (trust registry)
+scripts/              Local validator and integration-test runners (WSL)
 cmd/issuerkeygen/     Generates an issuer signing seed
 docs/                 Technical design
 ```
 
-Packages from the target layout in the design doc (`credential`, `issuer`,
-`verification`, `blockchain`, `repository`, `contracts/`, `migrations/`,
+Packages from the target layout in the design doc (`repository`, `migrations/`,
 `api/openapi.yaml`) are added in the phase that gives them real
 responsibilities. `internal/http` from the design is named `internal/httpapi`
 so the package doesn't shadow `net/http`.
@@ -198,3 +211,17 @@ solana-test-validator                                   # local validator
 Keep keypairs outside the repository. When Phase 2 starts, pin the exact
 Rust/Solana/Anchor versions in `contracts/kyc-registry` (`rust-toolchain.toml`,
 `Anchor.toml`) and record them in the requirements table above.
+
+## Testing against a local validator
+
+`go test ./...` needs no blockchain. The integration tests (build tag
+`integration`) run the Go adapter and the application against a real
+`solana-test-validator` with the registry program deployed:
+
+```sh
+make anchor-build                    # builds the program (WSL)
+bash scripts/integration-test.sh     # Git Bash: starts the validator in WSL, runs the tests, stops it
+```
+
+Without the environment the script sets up, the integration tests skip. See
+`docs/go_solana_integration.md` for how the Go side talks to the program.

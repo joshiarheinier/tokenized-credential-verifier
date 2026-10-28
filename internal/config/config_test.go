@@ -33,6 +33,8 @@ func TestLoadDefaults(t *testing.T) {
 func TestLoadOverrides(t *testing.T) {
 	cfg, err := Load(env(map[string]string{
 		"APP_ENV":                 "production",
+		"SOLANA_RPC_URL":          "https://rpc.example",
+		"SOLANA_PROGRAM_ID":       "p",
 		"ISSUER_SIGNING_KEY_SEED": "seed",
 		"HTTP_ADDR":               "127.0.0.1:9000",
 		"HTTP_READ_TIMEOUT":       "3s",
@@ -98,11 +100,76 @@ func TestLoadProductionGuards(t *testing.T) {
 		}
 	}
 
-	cfg, err := Load(env(map[string]string{"APP_ENV": "production", "ISSUER_SIGNING_KEY_SEED": "x"}))
+	cfg, err := Load(env(map[string]string{"APP_ENV": "production", "ISSUER_SIGNING_KEY_SEED": "x", "SOLANA_RPC_URL": "u", "SOLANA_PROGRAM_ID": "p"}))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
 	if cfg.KYC.SimulationEnabled {
 		t.Error("simulation must default to disabled in production")
+	}
+}
+
+func TestSolanaDefaultsToDisabled(t *testing.T) {
+	cfg, err := Load(env(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := cfg.Solana
+	if s.RPCURL != "" || s.Bootstrap || s.Commitment != "confirmed" ||
+		s.RequestTimeout != 10*time.Second || s.TxTimeout != 30*time.Second {
+		t.Errorf("Solana = %+v, want chain disabled with safe defaults", s)
+	}
+}
+
+func TestSolanaValidation(t *testing.T) {
+	const url = "http://127.0.0.1:8899"
+	cases := []struct {
+		name    string
+		env     map[string]string
+		wantErr string // substring naming the offending variable; empty = valid
+	}{
+		{"url without program id", map[string]string{"SOLANA_RPC_URL": url, "KYC_SIMULATION_ENABLED": "false"}, "SOLANA_PROGRAM_ID"},
+		{"issuance without issuer authority", map[string]string{"SOLANA_RPC_URL": url, "SOLANA_PROGRAM_ID": "p"}, "SOLANA_ISSUER_AUTHORITY_KEYPAIR"},
+		{"bootstrap without url", map[string]string{"SOLANA_BOOTSTRAP": "true"}, "SOLANA_BOOTSTRAP"},
+		{"bootstrap without keypairs", map[string]string{"SOLANA_RPC_URL": url, "SOLANA_PROGRAM_ID": "p", "SOLANA_ISSUER_AUTHORITY_KEYPAIR": "i", "SOLANA_BOOTSTRAP": "true"}, "SOLANA_BOOTSTRAP"},
+		{"processed commitment is refused", map[string]string{"SOLANA_COMMITMENT": "processed"}, "SOLANA_COMMITMENT"},
+		{"verification-only needs no keys", map[string]string{"SOLANA_RPC_URL": url, "SOLANA_PROGRAM_ID": "p", "KYC_SIMULATION_ENABLED": "false"}, ""},
+		{"full dev setup", map[string]string{"SOLANA_RPC_URL": url, "SOLANA_PROGRAM_ID": "p", "SOLANA_ISSUER_AUTHORITY_KEYPAIR": "i", "SOLANA_REGISTRY_AUTHORITY_KEYPAIR": "r", "SOLANA_BOOTSTRAP": "true", "ISSUER_SIGNING_KEY_SEED": "s"}, ""},
+		{"bootstrap with an ephemeral issuer key", map[string]string{"SOLANA_RPC_URL": url, "SOLANA_PROGRAM_ID": "p", "SOLANA_ISSUER_AUTHORITY_KEYPAIR": "i", "SOLANA_REGISTRY_AUTHORITY_KEYPAIR": "r", "SOLANA_BOOTSTRAP": "true"}, "ISSUER_SIGNING_KEY_SEED"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Load(env(tc.env))
+			switch {
+			case tc.wantErr == "" && err != nil:
+				t.Fatalf("unexpected error: %v", err)
+			case tc.wantErr != "" && (err == nil || !strings.Contains(err.Error(), tc.wantErr)):
+				t.Fatalf("err = %v, want it to mention %s", err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestProductionRequiresTheChain(t *testing.T) {
+	base := map[string]string{"APP_ENV": "production", "ISSUER_SIGNING_KEY_SEED": "x"}
+
+	_, err := Load(env(base))
+	if err == nil || !strings.Contains(err.Error(), "SOLANA_RPC_URL") {
+		t.Fatalf("err = %v, want production to require SOLANA_RPC_URL", err)
+	}
+
+	withChain := map[string]string{"SOLANA_RPC_URL": "https://rpc.example", "SOLANA_PROGRAM_ID": "p"}
+	for k, v := range base {
+		withChain[k] = v
+	}
+	if _, err := Load(env(withChain)); err != nil {
+		t.Fatalf("production with chain: %v", err)
+	}
+
+	withChain["SOLANA_BOOTSTRAP"] = "true"
+	withChain["SOLANA_REGISTRY_AUTHORITY_KEYPAIR"] = "r"
+	withChain["SOLANA_ISSUER_AUTHORITY_KEYPAIR"] = "i"
+	if _, err := Load(env(withChain)); err == nil || !strings.Contains(err.Error(), "SOLANA_BOOTSTRAP") {
+		t.Fatalf("err = %v, want bootstrap refused in production", err)
 	}
 }

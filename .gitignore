@@ -31,3 +31,6 @@ node_modules/
 *.swp
 .DS_Store
 Thumbs.db
+
+# Local validator state and test keypairs
+.local/

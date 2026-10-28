@@ -152,8 +152,6 @@ type verifyResponse struct {
 	Claims         *credential.KYCClaims `json:"claims,omitempty"`
 }
 
-// verify always answers 200 for a well-formed request: an invalid credential
-// is a normal verification outcome, not a client error.
 func (h *v1Handlers) verify(w http.ResponseWriter, r *http.Request) {
 	var req verifyRequest
 	if !decodeBody(w, r, &req) {
@@ -165,7 +163,11 @@ func (h *v1Handlers) verify(w http.ResponseWriter, r *http.Request) {
 	}
 	res := h.api.CredentialVerification.Verify(r.Context(), req.Credential)
 	if !res.Valid {
-		writeJSON(w, http.StatusOK, verifyResponse{Valid: false, Reason: res.Reason})
+		status := http.StatusOK
+		if res.Reason == verification.ReasonUnavailable {
+			status = http.StatusServiceUnavailable
+		}
+		writeJSON(w, status, verifyResponse{Valid: false, Reason: res.Reason})
 		return
 	}
 	writeJSON(w, http.StatusOK, verifyResponse{

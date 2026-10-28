@@ -40,67 +40,75 @@ func (v *Verifier) Trust(issuerID string, pub ed25519.PublicKey) {
 // for a credential that failed any check. Errors wrap one of the Err*
 // sentinels.
 func (v *Verifier) Verify(token string) (*Claims, error) {
+	c, _, err := v.VerifyWithKey(token)
+	return c, err
+}
+
+// VerifyWithKey is Verify that also returns the public key the signature was
+// verified with, so callers can check it against an independent source of
+// issuer trust such as the on-chain registry.
+func (v *Verifier) VerifyWithKey(token string) (*Claims, ed25519.PublicKey, error) {
 	if len(token) > MaxTokenSize {
-		return nil, fmt.Errorf("%w: too large", ErrMalformed)
+		return nil, nil, fmt.Errorf("%w: too large", ErrMalformed)
 	}
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
-		return nil, fmt.Errorf("%w: want 3 segments", ErrMalformed)
+		return nil, nil, fmt.Errorf("%w: want 3 segments", ErrMalformed)
 	}
 	rawHeader, err := b64.DecodeString(parts[0])
 	if err != nil {
-		return nil, fmt.Errorf("%w: header encoding", ErrMalformed)
+		return nil, nil, fmt.Errorf("%w: header encoding", ErrMalformed)
 	}
 	rawPayload, err := b64.DecodeString(parts[1])
 	if err != nil {
-		return nil, fmt.Errorf("%w: payload encoding", ErrMalformed)
+		return nil, nil, fmt.Errorf("%w: payload encoding", ErrMalformed)
 	}
 	sig, err := b64.DecodeString(parts[2])
 	if err != nil {
-		return nil, fmt.Errorf("%w: signature encoding", ErrMalformed)
+		return nil, nil, fmt.Errorf("%w: signature encoding", ErrMalformed)
 	}
 
 	var h header
 	if err := decodeStrict(rawHeader, &h); err != nil {
-		return nil, fmt.Errorf("%w: header: %v", ErrMalformed, err)
+		return nil, nil, fmt.Errorf("%w: header: %v", ErrMalformed, err)
 	}
 	// Reject anything but EdDSA, including "none", before touching keys.
 	if h.Alg != AlgEdDSA {
-		return nil, ErrUnsupportedAlg
+		return nil, nil, ErrUnsupportedAlg
 	}
 	tk, ok := v.keys[h.Kid]
 	if !ok {
-		return nil, ErrUnknownIssuer
+		return nil, nil, ErrUnknownIssuer
 	}
 	if len(sig) != ed25519.SignatureSize || !ed25519.Verify(tk.key, []byte(parts[0]+"."+parts[1]), sig) {
-		return nil, ErrInvalidSignature
+		return nil, nil, ErrInvalidSignature
 	}
 
 	// Only now is the payload authenticated and safe to interpret.
 	var c Claims
 	if err := decodeStrict(rawPayload, &c); err != nil {
-		return nil, fmt.Errorf("%w: claims: %v", ErrMalformed, err)
+		return nil, nil, fmt.Errorf("%w: claims: %v", ErrMalformed, err)
 	}
 	if c.Version != FormatVersion {
-		return nil, ErrUnsupportedVersion
+		return nil, nil, ErrUnsupportedVersion
 	}
 	if c.Issuer != tk.issuer {
-		return nil, ErrUnknownIssuer
+		return nil, nil, ErrUnknownIssuer
 	}
 	if c.CredentialType != TypeKYCStatus {
-		return nil, ErrUnsupportedType
+		return nil, nil, ErrUnsupportedType
 	}
 	if c.ID == "" || c.Subject == "" || c.ExpiresAt == 0 {
-		return nil, fmt.Errorf("%w: missing required claim", ErrMalformed)
+		return nil, nil, fmt.Errorf("%w: missing required claim", ErrMalformed)
 	}
 	now := v.now().Unix()
 	if now >= c.ExpiresAt {
-		return nil, ErrExpired
+		return nil, nil, ErrExpired
 	}
 	if c.IssuedAt > now {
-		return nil, ErrNotYetValid
+		return nil, nil, ErrNotYetValid
 	}
-	return &c, nil
+	return &c, tk.key, nil
 }
 
 // decodeStrict unmarshals a single JSON object, rejecting unknown fields and

@@ -26,6 +26,7 @@ type Config struct {
 	Log    LogConfig
 	Issuer IssuerConfig
 	KYC    KYCConfig
+	Solana SolanaConfig
 }
 
 // IssuerConfig identifies the credential issuer and its signing key.
@@ -43,6 +44,26 @@ type KYCConfig struct {
 	// SimulationEnabled exposes the simulated KYC and issuance endpoints.
 	// It must never be enabled in production.
 	SimulationEnabled bool
+}
+
+// SolanaConfig configures access to the on-chain registry. An empty RPCURL
+// disables the chain, leaving credential checks off-chain only; that is
+// refused in production so verification cannot silently skip the registry.
+type SolanaConfig struct {
+	RPCURL    string
+	ProgramID string
+	// Commitment is "confirmed" or "finalized".
+	Commitment string
+	// RegistryAuthorityKeypair and IssuerAuthorityKeypair are paths to
+	// solana-keygen JSON files. They are secrets: never log their contents.
+	// Verification-only processes need neither.
+	RegistryAuthorityKeypair string
+	IssuerAuthorityKeypair   string
+	RequestTimeout           time.Duration
+	TxTimeout                time.Duration
+	// Bootstrap makes startup create the registry and register this process's
+	// issuer if missing. Development and test only.
+	Bootstrap bool
 }
 
 // HTTPConfig controls the HTTP server.
@@ -86,6 +107,16 @@ func Load(getenv func(string) string) (Config, error) {
 		},
 	}
 	cfg.KYC.SimulationEnabled = l.boolean("KYC_SIMULATION_ENABLED", cfg.Env != EnvProduction)
+	cfg.Solana = SolanaConfig{
+		RPCURL:                   l.str("SOLANA_RPC_URL", ""),
+		ProgramID:                l.str("SOLANA_PROGRAM_ID", ""),
+		Commitment:               strings.ToLower(l.str("SOLANA_COMMITMENT", "confirmed")),
+		RegistryAuthorityKeypair: l.str("SOLANA_REGISTRY_AUTHORITY_KEYPAIR", ""),
+		IssuerAuthorityKeypair:   l.str("SOLANA_ISSUER_AUTHORITY_KEYPAIR", ""),
+		RequestTimeout:           l.duration("SOLANA_REQUEST_TIMEOUT", 10*time.Second),
+		TxTimeout:                l.duration("SOLANA_TX_TIMEOUT", 30*time.Second),
+		Bootstrap:                l.boolean("SOLANA_BOOTSTRAP", false),
+	}
 
 	switch cfg.Env {
 	case EnvDevelopment, EnvTest, EnvProduction:
@@ -98,7 +129,15 @@ func Load(getenv func(string) string) (Config, error) {
 		l.fail("LOG_FORMAT", cfg.Log.Format, "must be json or text")
 	}
 
+	l.validateSolana(cfg)
+
 	if cfg.Env == EnvProduction {
+		if cfg.Solana.RPCURL == "" {
+			l.fail("SOLANA_RPC_URL", "", "required in production: credentials must be checked against the on-chain registry")
+		}
+		if cfg.Solana.Bootstrap {
+			l.fail("SOLANA_BOOTSTRAP", "true", "registry bootstrap must not be enabled in production")
+		}
 		if cfg.KYC.SimulationEnabled {
 			l.fail("KYC_SIMULATION_ENABLED", "true", "simulated KYC must not be enabled in production")
 		}
@@ -111,6 +150,36 @@ func Load(getenv func(string) string) (Config, error) {
 		return Config{}, errors.Join(l.errs...)
 	}
 	return cfg, nil
+}
+
+// validateSolana checks the chain settings that depend on each other.
+func (l *loader) validateSolana(cfg Config) {
+	s := cfg.Solana
+	switch s.Commitment {
+	case "confirmed", "finalized":
+	default:
+		l.fail("SOLANA_COMMITMENT", s.Commitment, "must be confirmed or finalized")
+	}
+	if s.RPCURL == "" {
+		if s.Bootstrap {
+			l.fail("SOLANA_BOOTSTRAP", "true", "requires SOLANA_RPC_URL")
+		}
+		return
+	}
+	if s.ProgramID == "" {
+		l.fail("SOLANA_PROGRAM_ID", "", "required when SOLANA_RPC_URL is set")
+	}
+	if cfg.KYC.SimulationEnabled && s.IssuerAuthorityKeypair == "" {
+		l.fail("SOLANA_ISSUER_AUTHORITY_KEYPAIR", "", "required to register issued credentials on chain")
+	}
+	if s.Bootstrap && (s.RegistryAuthorityKeypair == "" || s.IssuerAuthorityKeypair == "") {
+		l.fail("SOLANA_BOOTSTRAP", "true", "requires both authority keypairs")
+	}
+	if s.Bootstrap && cfg.Issuer.SigningKeySeed == "" {
+		// An ephemeral key differs on every start, and the registry refuses to
+		// re-register an issuer under a different key.
+		l.fail("ISSUER_SIGNING_KEY_SEED", "", "required with SOLANA_BOOTSTRAP so the issuer key is stable across restarts")
+	}
 }
 
 type loader struct {

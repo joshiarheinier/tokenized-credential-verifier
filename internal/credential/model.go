@@ -1,5 +1,7 @@
 // Package credential defines the signed KYC credential: its data model,
-// signing and verification. It has no dependency on the blockchain.
+// signing and verification. Signing and verification never touch the
+// blockchain; only the optional on-chain registration at issuance does, through
+// the BlockchainClient interface.
 //
 // Format: a compact JWS (RFC 7515) with alg=EdDSA (Ed25519), carrying a
 // JWT-style claim set. It follows the shape of a W3C Verifiable Credential but

@@ -2,10 +2,12 @@ package verification
 
 import (
 	"context"
+	"crypto/ed25519"
 	"errors"
 	"time"
 
 	"github.com/joshia/tokenized-identity-kyc/internal/credential"
+	"github.com/joshia/tokenized-identity-kyc/pkg/connector/blockchain"
 )
 
 // Reason is a stable, coarse code explaining why a credential was rejected.
@@ -20,6 +22,12 @@ const (
 	ReasonExpired            Reason = "expired"
 	ReasonNotYetValid        Reason = "not_yet_valid"
 	ReasonPolicyNotSatisfied Reason = "policy_not_satisfied"
+	ReasonNotRegistered      Reason = "not_registered"
+	ReasonRevoked            Reason = "revoked"
+	// ReasonUnavailable means trust state could not be established (for
+	// example the chain is unreachable). The credential is not accepted, but
+	// this is an infrastructure failure, not a verdict on the credential.
+	ReasonUnavailable Reason = "verification_unavailable"
 )
 
 // Result is the outcome of verifying a presented credential. Subject and
@@ -33,25 +41,62 @@ type Result struct {
 	Claims         credential.KYCClaims
 }
 
-// Service verifies credentials against a policy.
+// BlockchainClient is the part of the Solana connector's client
+// (pkg/connector/blockchain.Client) that verification needs: reading the
+// issuer and credential records from the on-chain registry. Errors must wrap
+// blockchain.ErrNotFound only when the record is known to be absent; any
+// failure to establish state must be a different error.
+type BlockchainClient interface {
+	GetIssuer(ctx context.Context, id [32]byte) (blockchain.IssuerRecord, error)
+	GetCredentialStatus(ctx context.Context, ref [32]byte) (blockchain.CredentialStatus, error)
+}
+
+// Service verifies credentials against a policy and, when a BlockchainClient is
+// configured, against the issuer and credential status recorded on chain.
 type Service struct {
 	verifier *credential.Verifier
 	policy   Policy
+	chain    BlockchainClient
+	now      func() time.Time
 }
 
-func NewService(v *credential.Verifier, p Policy) *Service {
-	return &Service{verifier: v, policy: p}
+// Option customizes a Service.
+type Option func(*Service)
+
+// WithBlockchainClient requires issuer trust and credential status to be
+// confirmed on chain through c. Without it only the signature, validity period
+// and policy are checked.
+func WithBlockchainClient(c BlockchainClient) Option { return func(s *Service) { s.chain = c } }
+
+// WithClock overrides the wall clock used for on-chain expiry checks.
+func WithClock(now func() time.Time) Option { return func(s *Service) { s.now = now } }
+
+func NewService(v *credential.Verifier, p Policy, opts ...Option) *Service {
+	s := &Service{verifier: v, policy: p, now: time.Now}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
 // Verify returns a Result describing whether token is acceptable. Claims are
 // only populated for valid credentials.
-func (s *Service) Verify(_ context.Context, token string) Result {
-	c, err := s.verifier.Verify(token)
+//
+// With a BlockchainClient configured, verification fails closed: if the chain cannot
+// be read, or returns something unusable, the result is ReasonUnavailable and
+// the credential is not accepted.
+func (s *Service) Verify(ctx context.Context, token string) Result {
+	c, key, err := s.verifier.VerifyWithKey(token)
 	if err != nil {
 		return Result{Reason: reasonFor(err)}
 	}
 	if !s.policy.Satisfied(c.KYC) {
 		return Result{Reason: ReasonPolicyNotSatisfied}
+	}
+	if s.chain != nil {
+		if reason := s.checkOnChain(ctx, c, key); reason != "" {
+			return Result{Reason: reason}
+		}
 	}
 	return Result{
 		Valid:          true,
@@ -60,6 +105,43 @@ func (s *Service) Verify(_ context.Context, token string) Result {
 		ExpiresAt:      time.Unix(c.ExpiresAt, 0).UTC(),
 		Claims:         c.KYC,
 	}
+}
+
+// checkOnChain returns the rejection reason, or "" if the chain confirms the
+// issuer is trusted and the credential is registered, active and unexpired.
+func (s *Service) checkOnChain(ctx context.Context, c *credential.Claims, signedWith ed25519.PublicKey) Reason {
+	issuerID := blockchain.IssuerID(c.Issuer)
+	issuer, err := s.chain.GetIssuer(ctx, issuerID)
+	switch {
+	case errors.Is(err, blockchain.ErrNotFound):
+		return ReasonUntrustedIssuer
+	case err != nil:
+		return ReasonUnavailable
+	}
+	// The key that signed the credential must be the one the registry
+	// attests to, not merely one we happen to be configured with.
+	if !issuer.Active || !signedWith.Equal(issuer.SigningKey) {
+		return ReasonUntrustedIssuer
+	}
+
+	status, err := s.chain.GetCredentialStatus(ctx, blockchain.CredentialRef(c.ID))
+	switch {
+	case errors.Is(err, blockchain.ErrNotFound):
+		return ReasonNotRegistered
+	case err != nil:
+		return ReasonUnavailable
+	}
+	switch {
+	case status.IssuerID != issuerID:
+		return ReasonNotRegistered
+	case status.State == blockchain.CredentialRevoked:
+		return ReasonRevoked
+	case status.State != blockchain.CredentialActive:
+		return ReasonUnavailable
+	case !s.now().Before(status.ExpiresAt):
+		return ReasonExpired
+	}
+	return ""
 }
 
 func reasonFor(err error) Reason {

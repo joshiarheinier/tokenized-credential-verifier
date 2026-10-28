@@ -1,6 +1,7 @@
 package httpapi_test
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -221,5 +222,35 @@ func TestIssuanceRoutesAbsentWithoutSimulation(t *testing.T) {
 	}
 	if code, _ := e.post(t, "/v1/credentials/verify", `{"credential":"x"}`); code != http.StatusOK {
 		t.Errorf("verify unavailable: %d", code)
+	}
+}
+
+type stubVerification struct{ res verification.Result }
+
+func (s stubVerification) Verify(context.Context, string) verification.Result { return s.res }
+
+func TestVerifyDistinguishesUnavailableFromInvalid(t *testing.T) {
+	for _, tc := range []struct {
+		reason verification.Reason
+		want   int
+	}{
+		{verification.ReasonRevoked, http.StatusOK},
+		{verification.ReasonUntrustedIssuer, http.StatusOK},
+		{verification.ReasonUnavailable, http.StatusServiceUnavailable},
+	} {
+		api := httpapi.API{CredentialVerification: stubVerification{verification.Result{Reason: tc.reason}}}
+		srv := httptest.NewServer(httpapi.NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), api))
+		resp, err := http.Post(srv.URL+"/v1/credentials/verify", "application/json", strings.NewReader(`{"credential":"x"}`))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var body map[string]any
+		_ = json.NewDecoder(resp.Body).Decode(&body)
+		resp.Body.Close()
+		srv.Close()
+
+		if resp.StatusCode != tc.want || body["valid"] != false || body["reason"] != string(tc.reason) {
+			t.Errorf("%s: status=%d body=%v, want %d with valid=false", tc.reason, resp.StatusCode, body, tc.want)
+		}
 	}
 }
