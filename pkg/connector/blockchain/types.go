@@ -1,5 +1,5 @@
 // Package blockchain is the adapter between the application and the Solana
-// registry program in contracts/kyc-registry. It is the only package that
+// registry program in contracts/credential-registry. It is the only package that
 // imports the Solana SDK; business logic depends on the small interfaces and
 // plain types declared here.
 //

@@ -15,7 +15,7 @@ import (
 	"github.com/gagliardetto/solana-go"
 	"github.com/gagliardetto/solana-go/rpc"
 
-	"github.com/joshia/tokenized-identity-kyc/pkg/connector/blockchain"
+	"github.com/joshia/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 
 // Chain describes the local validator and the deployed registry program.
@@ -39,9 +39,9 @@ func RequireChain(t *testing.T) Chain {
 		return v
 	}
 	return Chain{
-		RPCURL:           get("KYC_TEST_RPC_URL"),
-		ProgramID:        get("KYC_TEST_PROGRAM_ID"),
-		AuthorityKeypair: get("KYC_TEST_AUTHORITY_KEYPAIR"),
+		RPCURL:           get("CREDENTIAL_TEST_RPC_URL"),
+		ProgramID:        get("CREDENTIAL_TEST_PROGRAM_ID"),
+		AuthorityKeypair: get("CREDENTIAL_TEST_AUTHORITY_KEYPAIR"),
 	}
 }
 

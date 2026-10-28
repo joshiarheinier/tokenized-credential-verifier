@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/joshia/tokenized-identity-kyc/internal/config"
+	"github.com/joshia/tokenized-credential-verifier/internal/config"
 )
 
 func TestServeAndGracefulShutdown(t *testing.T) {

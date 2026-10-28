@@ -6,8 +6,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/joshia/tokenized-identity-kyc/internal/credential"
-	"github.com/joshia/tokenized-identity-kyc/pkg/connector/blockchain"
+	"github.com/joshia/tokenized-credential-verifier/internal/credential"
+	"github.com/joshia/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 
 // Reason is a stable, coarse code explaining why a credential was rejected.

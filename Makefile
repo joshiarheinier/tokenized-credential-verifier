@@ -40,12 +40,12 @@ tidy: ## Tidy go.mod/go.sum
 clean: ## Remove build artifacts
 	rm -rf $(BIN_DIR) coverage.out
 
-# Anchor lives in WSL (see contracts/kyc-registry/scripts/anchor-wsl.sh).
+# Anchor lives in WSL (see contracts/credential-registry/scripts/anchor-wsl.sh).
 anchor-build: ## Build the Anchor program (via WSL)
-	wsl -e bash -ic 'cd contracts/kyc-registry && ./scripts/anchor-wsl.sh build'
+	wsl -e bash -ic 'cd contracts/credential-registry && ./scripts/anchor-wsl.sh build'
 
 anchor-test: anchor-build ## Run Anchor tests on a local validator (via WSL)
-	wsl -e bash -ic 'cd contracts/kyc-registry && ./scripts/anchor-wsl.sh test --skip-build --validator legacy'
+	wsl -e bash -ic 'cd contracts/credential-registry && ./scripts/anchor-wsl.sh test --skip-build --validator legacy'
 
 integration-test: anchor-build ## Run Go integration tests against a local validator (WSL)
 	bash scripts/integration-test.sh

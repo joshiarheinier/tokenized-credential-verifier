@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/joshia/tokenized-identity-kyc/internal/config"
-	"github.com/joshia/tokenized-identity-kyc/internal/issuer"
-	"github.com/joshia/tokenized-identity-kyc/internal/testutil"
-	"github.com/joshia/tokenized-identity-kyc/pkg/connector/blockchain"
+	"github.com/joshia/tokenized-credential-verifier/internal/config"
+	"github.com/joshia/tokenized-credential-verifier/internal/issuer"
+	"github.com/joshia/tokenized-credential-verifier/internal/testutil"
+	"github.com/joshia/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 
 func post(t *testing.T, url, body string) (int, map[string]any) {

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/joshia/tokenized-identity-kyc/internal/credential"
+	"github.com/joshia/tokenized-credential-verifier/internal/credential"
 )
 
 // Outcome is a simulated KYC decision.

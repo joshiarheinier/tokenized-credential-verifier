@@ -2,17 +2,17 @@ import * as anchor from "@anchor-lang/core";
 import { BN, Program } from "@anchor-lang/core";
 import { assert } from "chai";
 import { randomBytes } from "crypto";
-import { KycRegistry } from "../target/types/kyc_registry";
+import { CredentialRegistry } from "../target/types/credential_registry";
 
 const { Keypair, PublicKey, LAMPORTS_PER_SOL } = anchor.web3;
 
 const CREDENTIAL_ACTIVE = 0;
 const CREDENTIAL_REVOKED = 1;
 
-describe("kyc-registry", () => {
+describe("credential-registry", () => {
   anchor.setProvider(anchor.AnchorProvider.env());
   const provider = anchor.getProvider() as anchor.AnchorProvider;
-  const program = anchor.workspace.kycRegistry as Program<KycRegistry>;
+  const program = anchor.workspace.credentialRegistry as Program<CredentialRegistry>;
   const admin = (provider.wallet as anchor.Wallet).payer;
 
   const pda = (...seeds: Buffer[]) =>

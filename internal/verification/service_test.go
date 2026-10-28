@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/joshia/tokenized-identity-kyc/internal/credential"
-	"github.com/joshia/tokenized-identity-kyc/pkg/connector/blockchain"
+	"github.com/joshia/tokenized-credential-verifier/internal/credential"
+	"github.com/joshia/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 
 var now = time.Unix(1_793_000_000, 0)

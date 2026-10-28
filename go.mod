@@ -1,4 +1,4 @@
-module github.com/joshia/tokenized-identity-kyc
+module github.com/joshia/tokenized-credential-verifier
 
 go 1.26
 

@@ -12,13 +12,13 @@ set -euo pipefail
 export PATH="$HOME/.local/share/solana/install/active_release/bin:$PATH"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEPLOY_DIR="${KYC_REGISTRY_DEPLOY_DIR:-$HOME/build/kyc-registry/target/deploy}"
-SO="$DEPLOY_DIR/kyc_registry.so"
+DEPLOY_DIR="${CREDENTIAL_REGISTRY_DEPLOY_DIR:-$HOME/build/credential-registry/target/deploy}"
+SO="$DEPLOY_DIR/credential_registry.so"
 KEYPAIR="$ROOT/.local/test-authority-keypair.json"
-LEDGER="${KYC_LEDGER_DIR:-$HOME/build/test-ledger}"
+LEDGER="${CREDENTIAL_LEDGER_DIR:-$HOME/build/test-ledger}"
 
 [ -f "$SO" ] || { echo "missing $SO: run 'make anchor-build' first" >&2; exit 1; }
-PROGRAM_ID="$(solana-keygen pubkey "$DEPLOY_DIR/kyc_registry-keypair.json")"
+PROGRAM_ID="$(solana-keygen pubkey "$DEPLOY_DIR/credential_registry-keypair.json")"
 
 case "${1:-}" in
 program-id)

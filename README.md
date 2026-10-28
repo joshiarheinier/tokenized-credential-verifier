@@ -1,15 +1,19 @@
-# Tokenized Identity KYC
+# Tokenized Credential Verifier
 
-A privacy-preserving, reusable KYC credential system: a trusted issuer signs a
-credential, the user holds it, and applications verify it — checking issuer
-trust and credential status against a Solana registry — without ever seeing the
-user's identity documents.
+A privacy-preserving, reusable credential verification system: a trusted issuer
+signs a credential, the holder keeps it, and applications verify it — checking
+issuer trust and credential status against a Solana registry — without the
+issuer's underlying records ever being shared. It is meant to serve as shared
+infrastructure for different credential products. The first credential type is
+KYC status (simulated); other uses such as ticketing or memberships are future
+work.
 
-Full design: [`docs/td_init_project.md`](docs/td_init_project.md).
+Full design: [`docs/td_init_project.md`](docs/td_init_project.md) (written when
+this was a KYC-only project; its KYC framing predates the rename).
 
-**Current status: Phase 1** — off-chain credential MVP: simulated KYC, signed
-Ed25519 credentials, and a verification endpoint. Nothing depends on a
-blockchain yet; the Solana registry arrives in Phases 2-3.
+**Current status: Phase 3** — signed Ed25519 credentials, the Solana registry
+program, and the Go backend verifying against it. Issuance is still simulated
+KYC.
 
 ## Requirements
 
@@ -26,8 +30,8 @@ test it without installing Rust, Solana or Anchor.
 ## Quick start
 
 ```sh
-git clone <repo-url> tokenized-identity-kyc
-cd tokenized-identity-kyc
+git clone <repo-url> tokenized-credential-verifier
+cd tokenized-credential-verifier
 
 cp .env.example .env    # optional; every variable has a default
 go test ./...
@@ -166,7 +170,7 @@ internal/issuer/      Issuer identity and signing-key loading
 internal/identity/    Simulated KYC decisions (dev only, in memory)
 internal/verification/ Acceptance policy, on-chain checks and coarse rejection reasons
 pkg/connector/blockchain/ Connector to the Solana registry program (only package importing the SDK; no dependency on internal/)
-contracts/kyc-registry/ Anchor program (trust registry)
+contracts/credential-registry/ Anchor program (trust registry)
 scripts/              Local validator and integration-test runners (WSL)
 cmd/issuerkeygen/     Generates an issuer signing seed
 docs/                 Technical design
@@ -209,7 +213,7 @@ solana-test-validator                                   # local validator
 ```
 
 Keep keypairs outside the repository. When Phase 2 starts, pin the exact
-Rust/Solana/Anchor versions in `contracts/kyc-registry` (`rust-toolchain.toml`,
+Rust/Solana/Anchor versions in `contracts/credential-registry` (`rust-toolchain.toml`,
 `Anchor.toml`) and record them in the requirements table above.
 
 ## Testing against a local validator

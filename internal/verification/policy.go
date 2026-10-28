@@ -2,7 +2,7 @@
 // cryptographic credential verification.
 package verification
 
-import "github.com/joshia/tokenized-identity-kyc/internal/credential"
+import "github.com/joshia/tokenized-credential-verifier/internal/credential"
 
 // Policy lists the claims a relying application requires.
 type Policy struct {

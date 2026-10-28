@@ -6,7 +6,7 @@ Shared vocabulary for this project. Where this file and `td_init_project.md` dis
 
 | Term | What it is | In this project |
 |---|---|---|
-| **Registry** | Not a person. The on-chain list of trusted issuers and credential statuses. | The Anchor program in `contracts/kyc-registry` |
+| **Registry** | Not a person. The on-chain list of trusted issuers and credential statuses. | The Anchor program in `contracts/credential-registry` |
 | **Registry authority** | The administrator of the registry. Decides which issuers are trusted. | One Solana key, `RegistryConfig.authority`. In practice whoever runs the trust framework (a consortium operator or platform owner). |
 | **Issuer** | An organization that performs KYC and vouches for users, such as a bank or KYC provider. | An `IssuerRecord`, identified by `issuer_id`, either active or suspended |
 | **Issuer signing key** | The Ed25519 key an issuer signs credentials with. Used only by verifiers, off-chain. | `IssuerRecord.issuer_signing_key`. The program never uses it. |

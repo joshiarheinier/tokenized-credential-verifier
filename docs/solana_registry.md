@@ -1,6 +1,6 @@
 # Solana Registry Program
 
-Anchor program in `contracts/kyc-registry`. It stores only issuer trust and credential status; no personal data, credential contents or user identifiers go on-chain. Signature verification stays off-chain (see `td_init_project.md` §5).
+Anchor program in `contracts/credential-registry`. It stores only issuer trust and credential status; no personal data, credential contents or user identifiers go on-chain. Signature verification stays off-chain (see `td_init_project.md` §5).
 
 Program ID (localnet): `6NY7DBX4GQTq25E8pcrxUw4wDtGAC3EX1QVwD8jUDUMy`
 
@@ -91,4 +91,4 @@ A missing account, an unreadable account or an RPC failure means "not verified".
 make anchor-test
 ```
 
-This runs through WSL against a local `solana-test-validator`; see `contracts/kyc-registry/scripts/anchor-wsl.sh`.
+This runs through WSL against a local `solana-test-validator`; see `contracts/credential-registry/scripts/anchor-wsl.sh`.

@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 
 use crate::{
-    constants::*, error::ErrorCode, events::RegistryInitialized, program::KycRegistry,
+    constants::*, error::ErrorCode, events::RegistryInitialized, program::CredentialRegistry,
     state::RegistryConfig,
 };
 
@@ -24,7 +24,7 @@ pub struct InitializeRegistry<'info> {
     )]
     pub registry_config: Account<'info, RegistryConfig>,
     #[account(constraint = program.programdata_address()? == Some(program_data.key()))]
-    pub program: Program<'info, KycRegistry>,
+    pub program: Program<'info, CredentialRegistry>,
     pub program_data: Account<'info, ProgramData>,
     pub system_program: Program<'info, System>,
 }

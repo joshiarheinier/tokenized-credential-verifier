@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/joshia/tokenized-identity-kyc/internal/credential"
-	"github.com/joshia/tokenized-identity-kyc/internal/httpapi"
-	"github.com/joshia/tokenized-identity-kyc/internal/identity"
-	"github.com/joshia/tokenized-identity-kyc/internal/issuer"
-	"github.com/joshia/tokenized-identity-kyc/internal/verification"
+	"github.com/joshia/tokenized-credential-verifier/internal/credential"
+	"github.com/joshia/tokenized-credential-verifier/internal/httpapi"
+	"github.com/joshia/tokenized-credential-verifier/internal/identity"
+	"github.com/joshia/tokenized-credential-verifier/internal/issuer"
+	"github.com/joshia/tokenized-credential-verifier/internal/verification"
 )
 
 var startTime = time.Unix(1_793_000_000, 0)

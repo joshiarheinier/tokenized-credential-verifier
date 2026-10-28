@@ -17,7 +17,7 @@ import (
 
 // --- Wire format ------------------------------------------------------------
 
-// Discriminators copied from target/idl/kyc_registry.json. If the program's
+// Discriminators copied from target/idl/credential_registry.json. If the program's
 // instruction or account names change, these fail and the adapter must follow.
 func TestDiscriminatorsMatchIDL(t *testing.T) {
 	cases := map[string]struct {

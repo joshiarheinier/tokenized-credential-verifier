@@ -13,7 +13,7 @@ pub use state::*;
 declare_id!("6NY7DBX4GQTq25E8pcrxUw4wDtGAC3EX1QVwD8jUDUMy");
 
 #[program]
-pub mod kyc_registry {
+pub mod credential_registry {
     use super::*;
 
     pub fn initialize_registry(ctx: Context<InitializeRegistry>) -> Result<()> {

@@ -11,13 +11,13 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/joshia/tokenized-identity-kyc/internal/config"
-	"github.com/joshia/tokenized-identity-kyc/internal/credential"
-	"github.com/joshia/tokenized-identity-kyc/internal/httpapi"
-	"github.com/joshia/tokenized-identity-kyc/internal/identity"
-	"github.com/joshia/tokenized-identity-kyc/internal/issuer"
-	"github.com/joshia/tokenized-identity-kyc/internal/verification"
-	"github.com/joshia/tokenized-identity-kyc/pkg/connector/blockchain"
+	"github.com/joshia/tokenized-credential-verifier/internal/config"
+	"github.com/joshia/tokenized-credential-verifier/internal/credential"
+	"github.com/joshia/tokenized-credential-verifier/internal/httpapi"
+	"github.com/joshia/tokenized-credential-verifier/internal/identity"
+	"github.com/joshia/tokenized-credential-verifier/internal/issuer"
+	"github.com/joshia/tokenized-credential-verifier/internal/verification"
+	"github.com/joshia/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 
 // App is the assembled API application.

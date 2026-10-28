@@ -7,7 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	"github.com/joshia/tokenized-identity-kyc/internal/credential"
+	"github.com/joshia/tokenized-credential-verifier/internal/credential"
 )
 
 var seedEncoding = base64.RawURLEncoding.Strict()

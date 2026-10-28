@@ -150,7 +150,7 @@ func encodeBool(b bool) byte {
 }
 
 // Instruction builders. Account order and mutability mirror the Anchor
-// accounts structs (see target/idl/kyc_registry.json).
+// accounts structs (see target/idl/credential_registry.json).
 
 func (a addresses) initializeRegistryIx(authority solana.PublicKey) (solana.Instruction, error) {
 	cfg, err := a.registryConfig()

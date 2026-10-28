@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/joshia/tokenized-identity-kyc/pkg/connector/blockchain"
+	"github.com/joshia/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 
 var fixedNow = time.Unix(1_793_000_000, 0)

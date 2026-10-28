@@ -43,7 +43,7 @@ cd "$ROOT"
 # Default to every package; -p 1 runs packages one at a time since they share
 # one validator.
 if [ "$#" -eq 0 ]; then set -- ./internal/... ./pkg/...; fi
-KYC_TEST_RPC_URL="$RPC_URL" \
-KYC_TEST_PROGRAM_ID="$PROGRAM_ID" \
-KYC_TEST_AUTHORITY_KEYPAIR="$(cygpath -m "$ROOT/.local/test-authority-keypair.json")" \
+CREDENTIAL_TEST_RPC_URL="$RPC_URL" \
+CREDENTIAL_TEST_PROGRAM_ID="$PROGRAM_ID" \
+CREDENTIAL_TEST_AUTHORITY_KEYPAIR="$(cygpath -m "$ROOT/.local/test-authority-keypair.json")" \
 	go test -tags integration -count=1 -p 1 "$@"

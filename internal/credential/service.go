@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/joshia/tokenized-identity-kyc/pkg/connector/blockchain"
+	"github.com/joshia/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 
 // ApprovalSource hands out simulated KYC approvals. ConsumeApproval must

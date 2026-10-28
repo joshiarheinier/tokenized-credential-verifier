@@ -609,7 +609,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57d8d8ce877200136358e0bbff3a77965875db3af755a11e1fa6b1b3e2df13ea"
 
 [[package]]
-name = "kyc-registry"
+name = "credential-registry"
 version = "0.1.0"
 dependencies = [
  "anchor-lang",

@@ -8,9 +8,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/joshia/tokenized-identity-kyc/internal/app"
-	"github.com/joshia/tokenized-identity-kyc/internal/config"
-	"github.com/joshia/tokenized-identity-kyc/internal/logging"
+	"github.com/joshia/tokenized-credential-verifier/internal/app"
+	"github.com/joshia/tokenized-credential-verifier/internal/config"
+	"github.com/joshia/tokenized-credential-verifier/internal/logging"
 )
 
 func main() {

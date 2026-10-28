@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/joshia/tokenized-identity-kyc/internal/credential"
-	"github.com/joshia/tokenized-identity-kyc/internal/issuer"
+	"github.com/joshia/tokenized-credential-verifier/internal/credential"
+	"github.com/joshia/tokenized-credential-verifier/internal/issuer"
 )
 
 func main() {

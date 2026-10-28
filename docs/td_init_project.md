@@ -399,7 +399,7 @@ identity-kyc/
 │       └── app.go
 ├── migrations/
 ├── contracts/
-│   └── kyc-registry/
+│   └── credential-registry/
 │       ├── Anchor.toml
 │       ├── Cargo.toml
 │       ├── programs/

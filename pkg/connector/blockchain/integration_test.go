@@ -4,9 +4,9 @@
 // registry program. Run them with scripts/integration-test.sh, which starts the
 // validator and sets:
 //
-//	KYC_TEST_RPC_URL              validator JSON-RPC endpoint
-//	KYC_TEST_PROGRAM_ID           deployed registry program id
-//	KYC_TEST_AUTHORITY_KEYPAIR    keypair that is the program's upgrade authority
+//	CREDENTIAL_TEST_RPC_URL              validator JSON-RPC endpoint
+//	CREDENTIAL_TEST_PROGRAM_ID           deployed registry program id
+//	CREDENTIAL_TEST_AUTHORITY_KEYPAIR    keypair that is the program's upgrade authority
 package blockchain_test
 
 import (
@@ -24,7 +24,7 @@ import (
 	"github.com/gagliardetto/solana-go"
 	"github.com/gagliardetto/solana-go/rpc"
 
-	"github.com/joshia/tokenized-identity-kyc/pkg/connector/blockchain"
+	"github.com/joshia/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 
 type env struct {
@@ -88,10 +88,10 @@ func writeKeypair(t *testing.T, key solana.PrivateKey) string {
 func setup(t *testing.T) *env {
 	t.Helper()
 	e := &env{
-		rpcURL:    requireEnv(t, "KYC_TEST_RPC_URL"),
-		programID: requireEnv(t, "KYC_TEST_PROGRAM_ID"),
+		rpcURL:    requireEnv(t, "CREDENTIAL_TEST_RPC_URL"),
+		programID: requireEnv(t, "CREDENTIAL_TEST_PROGRAM_ID"),
 	}
-	registryPath := requireEnv(t, "KYC_TEST_AUTHORITY_KEYPAIR")
+	registryPath := requireEnv(t, "CREDENTIAL_TEST_AUTHORITY_KEYPAIR")
 	var err error
 	if e.registry, err = blockchain.LoadKeypair(registryPath); err != nil {
 		t.Fatal(err)

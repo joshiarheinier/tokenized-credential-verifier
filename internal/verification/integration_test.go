@@ -11,10 +11,10 @@ import (
 
 	"github.com/gagliardetto/solana-go"
 
-	"github.com/joshia/tokenized-identity-kyc/internal/credential"
-	"github.com/joshia/tokenized-identity-kyc/internal/testutil"
-	"github.com/joshia/tokenized-identity-kyc/internal/verification"
-	"github.com/joshia/tokenized-identity-kyc/pkg/connector/blockchain"
+	"github.com/joshia/tokenized-credential-verifier/internal/credential"
+	"github.com/joshia/tokenized-credential-verifier/internal/testutil"
+	"github.com/joshia/tokenized-credential-verifier/internal/verification"
+	"github.com/joshia/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 
 type approvals struct{}

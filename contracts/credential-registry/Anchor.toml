@@ -6,11 +6,11 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-kyc_registry = "6NY7DBX4GQTq25E8pcrxUw4wDtGAC3EX1QVwD8jUDUMy"
+credential_registry = "6NY7DBX4GQTq25E8pcrxUw4wDtGAC3EX1QVwD8jUDUMy"
 
 [provider]
 cluster = "localnet"
-wallet = "~/build/kyc-registry-dev-wallet.json"
+wallet = "~/build/credential-registry-dev-wallet.json"
 
 [scripts]
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 \"tests/**/*.ts\""
@@ -21,5 +21,5 @@ test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 \"tests/**/*.ts\""
 # (initialize_registry requires it).
 [[test.genesis]]
 address = "6NY7DBX4GQTq25E8pcrxUw4wDtGAC3EX1QVwD8jUDUMy"
-program = "target/deploy/kyc_registry.so"
+program = "target/deploy/credential_registry.so"
 upgradeable = true
