@@ -19,8 +19,8 @@ The credential layer and the program use different identifiers. `pkg/connector/b
 
 | Credential claim | On-chain id |
 |---|---|
-| `iss` (issuer string) | `issuer_id = sha256("kyc-registry/issuer/v1\0" + iss)` |
-| `jti` (random 128-bit id) | `credential_ref = sha256("kyc-registry/credential/v1\0" + jti)` |
+| `iss` (issuer string) | `issuer_id = sha256("credential-registry/issuer/v1\0" + iss)` |
+| `jti` (random 128-bit id) | `credential_ref = sha256("credential-registry/credential/v1\0" + jti)` |
 
 `jti` is random, so `credential_ref` reveals nothing about the subject and cannot be linked to a credential by anyone who does not hold it.
 
@@ -87,7 +87,7 @@ Consequence: a registration failure leaves that simulated approval consumed, and
 - No revocation or issuer-administration HTTP endpoints yet (TD: later phases). The client methods exist.
 - `set_paused` and `update_registry_authority` have no Go client methods yet.
 - `/readyz` does not check the RPC endpoint yet.
-- A failed registration burns the simulated KYC approval (see Issuance).
+- A failed registration burns the simulated approval (see Issuance).
 - Reads are not cached; every verification makes two RPC calls.
 
 ## Tests

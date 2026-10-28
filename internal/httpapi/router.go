@@ -21,9 +21,9 @@ func NewRouter(logger *slog.Logger, api API, checks ...ReadinessCheck) http.Hand
 	mux.HandleFunc("GET /healthz", handleHealthz)
 	mux.Handle("GET /readyz", readyzHandler(logger, checks))
 
-	// Simulated KYC and issuance (development only)
-	if api.KYCSimulation != nil {
-		mux.HandleFunc("POST /v1/kyc/simulate", v1.simulate)
+	// Simulated approvals and issuance (development only)
+	if api.ApprovalSimulation != nil {
+		mux.HandleFunc("POST /v1/approvals/simulate", v1.simulate)
 	}
 	if api.CredentialIssuance != nil {
 		mux.HandleFunc("POST /v1/credentials", v1.issue)

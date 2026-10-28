@@ -32,7 +32,7 @@ func post(t *testing.T, url, body string) (int, map[string]any) {
 }
 
 // TestAppIssuesAndVerifiesAgainstChain boots the real application with registry
-// bootstrap enabled and drives it over HTTP: simulate KYC, issue a credential
+// bootstrap enabled and drives it over HTTP: simulate an approval, issue a credential
 // (which registers it on chain) and verify it.
 func TestAppIssuesAndVerifiesAgainstChain(t *testing.T) {
 	chain := testutil.RequireChain(t)
@@ -59,7 +59,7 @@ func TestAppIssuesAndVerifiesAgainstChain(t *testing.T) {
 		"SOLANA_REGISTRY_AUTHORITY_KEYPAIR": chain.AuthorityKeypair,
 		"SOLANA_ISSUER_AUTHORITY_KEYPAIR":   issuerKeypair,
 		"SOLANA_BOOTSTRAP":                  "true",
-		"KYC_SIMULATION_ENABLED":            "true",
+		"APPROVAL_SIMULATION_ENABLED":       "true",
 	}
 	cfg, err := config.Load(func(k string) string { return vars[k] })
 	if err != nil {
@@ -84,11 +84,11 @@ func TestAppIssuesAndVerifiesAgainstChain(t *testing.T) {
 	defer func() { stop(); <-done }()
 	base := "http://" + ln.Addr().String()
 
-	code, sim := post(t, base+"/v1/kyc/simulate", `{"subject":"user-1","outcome":"approved","over_18":true,"country":"ID"}`)
+	code, sim := post(t, base+"/v1/approvals/simulate", `{"subject":"user-1","credential_type":"KYCStatus","outcome":"approved","claims":{"kyc_verified":true,"over_18":true,"country":"ID"}}`)
 	if code != http.StatusCreated {
 		t.Fatalf("simulate = %d %v", code, sim)
 	}
-	code, issued := post(t, base+"/v1/credentials", `{"kyc_result_id":"`+sim["kyc_result_id"].(string)+`"}`)
+	code, issued := post(t, base+"/v1/credentials", `{"approval_id":"`+sim["approval_id"].(string)+`"}`)
 	if code != http.StatusCreated {
 		t.Fatalf("issue = %d %v", code, issued)
 	}

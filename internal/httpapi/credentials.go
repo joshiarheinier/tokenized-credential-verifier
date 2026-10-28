@@ -10,18 +10,19 @@ import (
 	"time"
 
 	"github.com/joshia/tokenized-credential-verifier/internal/credential"
-	"github.com/joshia/tokenized-credential-verifier/internal/identity"
+	"github.com/joshia/tokenized-credential-verifier/internal/simulation"
 	"github.com/joshia/tokenized-credential-verifier/internal/verification"
 )
 
 const maxBodyBytes = 16 * 1024
 
-// KYCSimulationService records simulated KYC decisions. Development only.
-type KYCSimulationService interface {
-	Simulate(ctx context.Context, req identity.SimulationRequest) (identity.Result, error)
+// ApprovalSimulationService records simulated issuer approvals. Development
+// only.
+type ApprovalSimulationService interface {
+	Simulate(ctx context.Context, req simulation.Request) (simulation.Result, error)
 }
 
-// CredentialIssuanceService issues credentials for approved KYC results.
+// CredentialIssuanceService issues credentials for approvals.
 type CredentialIssuanceService interface {
 	IssueFromApproval(ctx context.Context, approvalID string) (credential.Issued, error)
 }
@@ -34,7 +35,7 @@ type CredentialVerificationService interface {
 // API holds the services behind the /v1 routes. A nil field leaves its routes
 // unregistered (they return 404), e.g. simulation and issuance in production.
 type API struct {
-	KYCSimulation          KYCSimulationService
+	ApprovalSimulation     ApprovalSimulationService
 	CredentialIssuance     CredentialIssuanceService
 	CredentialVerification CredentialVerificationService
 }
@@ -76,15 +77,15 @@ func decodeBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 }
 
 type simulateRequest struct {
-	Subject string           `json:"subject"`
-	Outcome identity.Outcome `json:"outcome"`
-	Over18  bool             `json:"over_18"`
-	Country string           `json:"country"`
+	Subject        string             `json:"subject"`
+	CredentialType string             `json:"credential_type"`
+	Outcome        simulation.Outcome `json:"outcome"`
+	Claims         map[string]any     `json:"claims"`
 }
 
 type simulateResponse struct {
-	KYCResultID string           `json:"kyc_result_id"`
-	Outcome     identity.Outcome `json:"outcome"`
+	ApprovalID string             `json:"approval_id"`
+	Outcome    simulation.Outcome `json:"outcome"`
 }
 
 func (h *v1Handlers) simulate(w http.ResponseWriter, r *http.Request) {
@@ -92,22 +93,22 @@ func (h *v1Handlers) simulate(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &req) {
 		return
 	}
-	res, err := h.api.KYCSimulation.Simulate(r.Context(), identity.SimulationRequest{
-		Subject: req.Subject, Outcome: req.Outcome, Over18: req.Over18, Country: req.Country,
+	res, err := h.api.ApprovalSimulation.Simulate(r.Context(), simulation.Request{
+		Subject: req.Subject, CredentialType: req.CredentialType, Outcome: req.Outcome, Claims: req.Claims,
 	})
 	if err != nil {
-		if errors.Is(err, identity.ErrInvalidRequest) {
+		if errors.Is(err, simulation.ErrInvalidRequest) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		h.internalError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, simulateResponse{KYCResultID: res.ID, Outcome: res.Outcome})
+	writeJSON(w, http.StatusCreated, simulateResponse{ApprovalID: res.ID, Outcome: res.Outcome})
 }
 
 type issueRequest struct {
-	KYCResultID string `json:"kyc_result_id"`
+	ApprovalID string `json:"approval_id"`
 }
 
 type issueResponse struct {
@@ -120,20 +121,20 @@ func (h *v1Handlers) issue(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &req) {
 		return
 	}
-	if req.KYCResultID == "" {
-		writeError(w, http.StatusBadRequest, "kyc_result_id is required")
+	if req.ApprovalID == "" {
+		writeError(w, http.StatusBadRequest, "approval_id is required")
 		return
 	}
-	issued, err := h.api.CredentialIssuance.IssueFromApproval(r.Context(), req.KYCResultID)
+	issued, err := h.api.CredentialIssuance.IssueFromApproval(r.Context(), req.ApprovalID)
 	switch {
 	case err == nil:
 		writeJSON(w, http.StatusCreated, issueResponse{Credential: issued.Token, ExpiresAt: issued.ExpiresAt})
-	case errors.Is(err, identity.ErrNotFound):
-		writeError(w, http.StatusNotFound, "kyc result not found")
-	case errors.Is(err, identity.ErrNotApproved):
-		writeError(w, http.StatusUnprocessableEntity, "kyc result was not approved")
-	case errors.Is(err, identity.ErrAlreadyUsed):
-		writeError(w, http.StatusConflict, "a credential was already issued for this kyc result")
+	case errors.Is(err, simulation.ErrNotFound):
+		writeError(w, http.StatusNotFound, "approval not found")
+	case errors.Is(err, simulation.ErrNotApproved):
+		writeError(w, http.StatusUnprocessableEntity, "approval was not approved")
+	case errors.Is(err, simulation.ErrAlreadyUsed):
+		writeError(w, http.StatusConflict, "a credential was already issued for this approval")
 	default:
 		h.internalError(w, r, err)
 	}
@@ -144,12 +145,12 @@ type verifyRequest struct {
 }
 
 type verifyResponse struct {
-	Valid          bool                  `json:"valid"`
-	Reason         verification.Reason   `json:"reason,omitempty"`
-	Issuer         string                `json:"issuer,omitempty"`
-	CredentialType string                `json:"credential_type,omitempty"`
-	ExpiresAt      *time.Time            `json:"expires_at,omitempty"`
-	Claims         *credential.KYCClaims `json:"claims,omitempty"`
+	Valid          bool                `json:"valid"`
+	Reason         verification.Reason `json:"reason,omitempty"`
+	Issuer         string              `json:"issuer,omitempty"`
+	CredentialType string              `json:"credential_type,omitempty"`
+	ExpiresAt      *time.Time          `json:"expires_at,omitempty"`
+	Claims         map[string]any      `json:"claims,omitempty"`
 }
 
 func (h *v1Handlers) verify(w http.ResponseWriter, r *http.Request) {
@@ -175,7 +176,7 @@ func (h *v1Handlers) verify(w http.ResponseWriter, r *http.Request) {
 		Issuer:         res.Issuer,
 		CredentialType: res.CredentialType,
 		ExpiresAt:      &res.ExpiresAt,
-		Claims:         &res.Claims,
+		Claims:         res.Claims,
 	})
 }
 

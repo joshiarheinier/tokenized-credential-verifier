@@ -13,13 +13,25 @@ import (
 	"time"
 
 	"github.com/joshia/tokenized-credential-verifier/internal/credential"
+	"github.com/joshia/tokenized-credential-verifier/internal/credential/kyc"
 	"github.com/joshia/tokenized-credential-verifier/internal/httpapi"
-	"github.com/joshia/tokenized-credential-verifier/internal/identity"
 	"github.com/joshia/tokenized-credential-verifier/internal/issuer"
+	"github.com/joshia/tokenized-credential-verifier/internal/simulation"
 	"github.com/joshia/tokenized-credential-verifier/internal/verification"
 )
 
 var startTime = time.Unix(1_793_000_000, 0)
+
+// A non-KYC credential type, to show the HTTP layer is not tied to KYC.
+const membershipType = "Membership"
+
+var membershipSchema = credential.Schema{
+	Type: membershipType,
+	Fields: []credential.Field{
+		{Name: "tier", Kind: credential.String, Required: true},
+		{Name: "member_since", Kind: credential.Number},
+	},
+}
 
 type testEnv struct {
 	srv *httptest.Server
@@ -37,16 +49,24 @@ func newEnv(t *testing.T, withIssuance bool) *testEnv {
 	now := startTime
 	clock := func() time.Time { return now }
 
-	v := credential.NewVerifier(clock)
+	schemas, err := credential.NewSchemas(kyc.Schema, membershipSchema)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policies := []verification.Policy{
+		{CredentialType: kyc.Type, Require: []verification.Requirement{{Claim: kyc.ClaimVerified, Equals: true}}},
+		{CredentialType: membershipType, Require: []verification.Requirement{{Claim: "tier", Equals: "gold"}}, Disclose: []string{"tier"}},
+	}
+	v := credential.NewVerifier(schemas, clock)
 	v.Trust(iss.ID, iss.Signer.PublicKey())
-	api := httpapi.API{CredentialVerification: verification.NewService(v, verification.DefaultPolicy)}
+	api := httpapi.API{CredentialVerification: verification.NewService(v, policies)}
 	if withIssuance {
-		kyc := identity.NewService()
-		svc, err := credential.NewService(iss.Signer, kyc, time.Hour, clock)
+		approvals := simulation.NewService(schemas)
+		svc, err := credential.NewService(iss.Signer, approvals, schemas, time.Hour, clock)
 		if err != nil {
 			t.Fatal(err)
 		}
-		api.KYCSimulation, api.CredentialIssuance = kyc, svc
+		api.ApprovalSimulation, api.CredentialIssuance = approvals, svc
 	}
 	srv := httptest.NewServer(httpapi.NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), api))
 	t.Cleanup(srv.Close)
@@ -67,18 +87,18 @@ func (e *testEnv) post(t *testing.T, path, body string) (int, map[string]any) {
 
 func (e *testEnv) issueCredential(t *testing.T, simBody string) string {
 	t.Helper()
-	code, sim := e.post(t, "/v1/kyc/simulate", simBody)
+	code, sim := e.post(t, "/v1/approvals/simulate", simBody)
 	if code != http.StatusCreated {
 		t.Fatalf("simulate = %d %v", code, sim)
 	}
-	code, iss := e.post(t, "/v1/credentials", `{"kyc_result_id":"`+sim["kyc_result_id"].(string)+`"}`)
+	code, iss := e.post(t, "/v1/credentials", `{"approval_id":"`+sim["approval_id"].(string)+`"}`)
 	if code != http.StatusCreated {
 		t.Fatalf("issue = %d %v", code, iss)
 	}
 	return iss["credential"].(string)
 }
 
-const approved = `{"subject":"user-1","outcome":"approved","over_18":true,"country":"ID"}`
+const approved = `{"subject":"user-1","credential_type":"KYCStatus","outcome":"approved","claims":{"kyc_verified":true,"over_18":true,"country":"ID"}}`
 
 func TestIssueAndVerifyFlow(t *testing.T) {
 	e := newEnv(t, true)
@@ -120,8 +140,8 @@ func TestVerifyRejections(t *testing.T) {
 	other, _ := issuer.New(e.iss.ID, otherSeed)
 	foreign, _ := other.Signer.Sign(credential.Claims{
 		Subject: "u", ID: "j", IssuedAt: startTime.Unix(), ExpiresAt: startTime.Add(time.Hour).Unix(),
-		CredentialType: credential.TypeKYCStatus,
-		KYC:            credential.KYCClaims{KYCVerified: true},
+		CredentialType: kyc.Type,
+		Attributes:     map[string]any{"kyc_verified": true, "over_18": true, "country": "ID"},
 	})
 
 	tests := []struct {
@@ -149,10 +169,11 @@ func TestVerifyRejections(t *testing.T) {
 
 func TestPolicyRejectsUnverifiedClaims(t *testing.T) {
 	e := newEnv(t, false)
-	// Correctly signed, but attests kyc_verified=false.
+	// Correctly signed and well-formed, but attests kyc_verified=false.
 	token, _ := e.iss.Signer.Sign(credential.Claims{
 		Subject: "u", ID: "j", IssuedAt: startTime.Unix(), ExpiresAt: startTime.Add(time.Hour).Unix(),
-		CredentialType: credential.TypeKYCStatus,
+		CredentialType: kyc.Type,
+		Attributes:     map[string]any{"kyc_verified": false, "over_18": false, "country": "ID"},
 	})
 	_, res := e.post(t, "/v1/credentials/verify", `{"credential":"`+token+`"}`)
 	if res["valid"] != false || res["reason"] != "policy_not_satisfied" {
@@ -160,10 +181,10 @@ func TestPolicyRejectsUnverifiedClaims(t *testing.T) {
 	}
 }
 
-func TestRejectedKYCDoesNotIssue(t *testing.T) {
+func TestRejectedApprovalDoesNotIssue(t *testing.T) {
 	e := newEnv(t, true)
-	_, sim := e.post(t, "/v1/kyc/simulate", `{"subject":"user-2","outcome":"rejected"}`)
-	code, _ := e.post(t, "/v1/credentials", `{"kyc_result_id":"`+sim["kyc_result_id"].(string)+`"}`)
+	_, sim := e.post(t, "/v1/approvals/simulate", `{"subject":"user-2","outcome":"rejected"}`)
+	code, _ := e.post(t, "/v1/credentials", `{"approval_id":"`+sim["approval_id"].(string)+`"}`)
 	if code != http.StatusUnprocessableEntity {
 		t.Fatalf("issue after rejection = %d, want 422", code)
 	}
@@ -171,8 +192,8 @@ func TestRejectedKYCDoesNotIssue(t *testing.T) {
 
 func TestApprovalIsSingleUse(t *testing.T) {
 	e := newEnv(t, true)
-	_, sim := e.post(t, "/v1/kyc/simulate", approved)
-	body := `{"kyc_result_id":"` + sim["kyc_result_id"].(string) + `"}`
+	_, sim := e.post(t, "/v1/approvals/simulate", approved)
+	body := `{"approval_id":"` + sim["approval_id"].(string) + `"}`
 	if code, _ := e.post(t, "/v1/credentials", body); code != http.StatusCreated {
 		t.Fatalf("first issue = %d", code)
 	}
@@ -183,7 +204,7 @@ func TestApprovalIsSingleUse(t *testing.T) {
 
 func TestIssueUnknownResult(t *testing.T) {
 	e := newEnv(t, true)
-	if code, _ := e.post(t, "/v1/credentials", `{"kyc_result_id":"nope"}`); code != http.StatusNotFound {
+	if code, _ := e.post(t, "/v1/credentials", `{"approval_id":"nope"}`); code != http.StatusNotFound {
 		t.Fatalf("code = %d, want 404", code)
 	}
 }
@@ -191,12 +212,15 @@ func TestIssueUnknownResult(t *testing.T) {
 func TestBadRequests(t *testing.T) {
 	e := newEnv(t, true)
 	tests := []struct{ name, path, body string }{
-		{"simulate bad json", "/v1/kyc/simulate", `{`},
-		{"simulate unknown field", "/v1/kyc/simulate", `{"subject":"a","outcome":"approved","country":"ID","admin":1}`},
-		{"simulate trailing data", "/v1/kyc/simulate", approved + `{}`},
-		{"simulate missing subject", "/v1/kyc/simulate", `{"outcome":"approved","country":"ID"}`},
-		{"simulate bad outcome", "/v1/kyc/simulate", `{"subject":"a","outcome":"maybe"}`},
-		{"simulate bad country", "/v1/kyc/simulate", `{"subject":"a","outcome":"approved","country":"Indonesia"}`},
+		{"simulate bad json", "/v1/approvals/simulate", `{`},
+		{"simulate unknown field", "/v1/approvals/simulate", `{"subject":"a","credential_type":"KYCStatus","outcome":"approved","admin":1}`},
+		{"simulate trailing data", "/v1/approvals/simulate", approved + `{}`},
+		{"simulate missing subject", "/v1/approvals/simulate", `{"credential_type":"KYCStatus","outcome":"approved","claims":{"kyc_verified":true,"over_18":true,"country":"ID"}}`},
+		{"simulate bad outcome", "/v1/approvals/simulate", `{"subject":"a","outcome":"maybe"}`},
+		{"simulate unknown credential type", "/v1/approvals/simulate", `{"subject":"a","credential_type":"Nope","outcome":"approved","claims":{}}`},
+		{"simulate bad country", "/v1/approvals/simulate", `{"subject":"a","credential_type":"KYCStatus","outcome":"approved","claims":{"kyc_verified":true,"over_18":true,"country":"Indonesia"}}`},
+		{"simulate missing claim", "/v1/approvals/simulate", `{"subject":"a","credential_type":"KYCStatus","outcome":"approved","claims":{"kyc_verified":true}}`},
+		{"simulate unexpected claim", "/v1/approvals/simulate", `{"subject":"a","credential_type":"KYCStatus","outcome":"approved","claims":{"kyc_verified":true,"over_18":true,"country":"ID","name":"Ada"}}`},
 		{"issue missing id", "/v1/credentials", `{}`},
 		{"verify missing credential", "/v1/credentials/verify", `{}`},
 	}
@@ -215,7 +239,7 @@ func TestBadRequests(t *testing.T) {
 
 func TestIssuanceRoutesAbsentWithoutSimulation(t *testing.T) {
 	e := newEnv(t, false)
-	for _, path := range []string{"/v1/kyc/simulate", "/v1/credentials"} {
+	for _, path := range []string{"/v1/approvals/simulate", "/v1/credentials"} {
 		if code, _ := e.post(t, path, approved); code != http.StatusNotFound && code != http.StatusMethodNotAllowed {
 			t.Errorf("%s code = %d, want 404/405", path, code)
 		}
@@ -252,5 +276,28 @@ func TestVerifyDistinguishesUnavailableFromInvalid(t *testing.T) {
 		if resp.StatusCode != tc.want || body["valid"] != false || body["reason"] != string(tc.reason) {
 			t.Errorf("%s: status=%d body=%v, want %d with valid=false", tc.reason, resp.StatusCode, body, tc.want)
 		}
+	}
+}
+
+// The same endpoints carry any registered credential type: here a membership,
+// with a policy that only discloses the tier.
+func TestNonKYCCredentialTypeEndToEnd(t *testing.T) {
+	e := newEnv(t, true)
+	token := e.issueCredential(t, `{"subject":"user-9","credential_type":"Membership","outcome":"approved","claims":{"tier":"gold","member_since":2024}}`)
+
+	code, res := e.post(t, "/v1/credentials/verify", `{"credential":"`+token+`"}`)
+	if code != http.StatusOK || res["valid"] != true || res["credential_type"] != membershipType {
+		t.Fatalf("verify = %d %v", code, res)
+	}
+	claims := res["claims"].(map[string]any)
+	if len(claims) != 1 || claims["tier"] != "gold" {
+		t.Errorf("claims = %v, want only the disclosed tier", claims)
+	}
+
+	// A policy the credential does not meet.
+	silver := e.issueCredential(t, `{"subject":"user-10","credential_type":"Membership","outcome":"approved","claims":{"tier":"silver"}}`)
+	_, res = e.post(t, "/v1/credentials/verify", `{"credential":"`+silver+`"}`)
+	if res["valid"] != false || res["reason"] != "policy_not_satisfied" {
+		t.Fatalf("silver verify = %v", res)
 	}
 }

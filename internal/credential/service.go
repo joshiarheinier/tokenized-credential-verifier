@@ -10,8 +10,8 @@ import (
 	"github.com/joshia/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 
-// ApprovalSource hands out simulated KYC approvals. ConsumeApproval must
-// return each approval at most once.
+// ApprovalSource hands out issuance approvals. ConsumeApproval must return each
+// approval at most once.
 type ApprovalSource interface {
 	ConsumeApproval(ctx context.Context, id string) (Approval, error)
 }
@@ -30,10 +30,11 @@ type BlockchainClient interface {
 	RegisterCredential(ctx context.Context, issuerID, credentialRef [32]byte, expiresAt time.Time) (blockchain.WriteResult, error)
 }
 
-// Service issues credentials for approved KYC results.
+// Service issues credentials for approvals from an ApprovalSource.
 type Service struct {
 	signer    *Signer
 	approvals ApprovalSource
+	schemas   *Schemas
 	ttl       time.Duration
 	now       func() time.Time
 	chain     BlockchainClient
@@ -50,10 +51,11 @@ func WithBlockchainClient(c BlockchainClient) ServiceOption {
 	return func(s *Service) { s.chain = c }
 }
 
-// NewService returns an issuing Service. now may be nil to use the wall clock.
-func NewService(signer *Signer, approvals ApprovalSource, ttl time.Duration, now func() time.Time, opts ...ServiceOption) (*Service, error) {
-	if signer == nil || approvals == nil {
-		return nil, errors.New("credential: signer and approval source are required")
+// NewService returns an issuing Service that can issue the credential types in
+// schemas. now may be nil to use the wall clock.
+func NewService(signer *Signer, approvals ApprovalSource, schemas *Schemas, ttl time.Duration, now func() time.Time, opts ...ServiceOption) (*Service, error) {
+	if signer == nil || approvals == nil || schemas == nil {
+		return nil, errors.New("credential: signer, approval source and schemas are required")
 	}
 	if ttl <= 0 {
 		return nil, errors.New("credential: ttl must be positive")
@@ -61,7 +63,7 @@ func NewService(signer *Signer, approvals ApprovalSource, ttl time.Duration, now
 	if now == nil {
 		now = time.Now
 	}
-	s := &Service{signer: signer, approvals: approvals, ttl: ttl, now: now}
+	s := &Service{signer: signer, approvals: approvals, schemas: schemas, ttl: ttl, now: now}
 	for _, o := range opts {
 		o(s)
 	}
@@ -70,6 +72,8 @@ func NewService(signer *Signer, approvals ApprovalSource, ttl time.Duration, now
 
 // IssueFromApproval consumes the approval with the given id and signs a
 // credential for it. Errors from the approval source are returned unchanged.
+// The approval's credential type must be known and its claims must match that
+// type's schema; otherwise nothing is registered or signed.
 //
 // The approval is validated and consumed before anything is registered, so
 // invalid requests never cost an on-chain transaction. The consequence is that
@@ -79,6 +83,9 @@ func (s *Service) IssueFromApproval(ctx context.Context, approvalID string) (Iss
 	a, err := s.approvals.ConsumeApproval(ctx, approvalID)
 	if err != nil {
 		return Issued{}, err
+	}
+	if err := s.schemas.Validate(a.CredentialType, a.Claims); err != nil {
+		return Issued{}, fmt.Errorf("credential: approval: %w", err)
 	}
 	id, err := randomID()
 	if err != nil {
@@ -100,8 +107,8 @@ func (s *Service) IssueFromApproval(ctx context.Context, approvalID string) (Iss
 		ID:             id,
 		IssuedAt:       now.Unix(),
 		ExpiresAt:      exp.Unix(),
-		CredentialType: TypeKYCStatus,
-		KYC:            a.Claims,
+		CredentialType: a.CredentialType,
+		Attributes:     a.Claims,
 	})
 	if err != nil {
 		return Issued{}, err

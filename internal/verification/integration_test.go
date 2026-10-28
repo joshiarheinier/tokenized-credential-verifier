@@ -12,15 +12,33 @@ import (
 	"github.com/gagliardetto/solana-go"
 
 	"github.com/joshia/tokenized-credential-verifier/internal/credential"
+	"github.com/joshia/tokenized-credential-verifier/internal/credential/kyc"
 	"github.com/joshia/tokenized-credential-verifier/internal/testutil"
 	"github.com/joshia/tokenized-credential-verifier/internal/verification"
 	"github.com/joshia/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 
+var schemas = func() *credential.Schemas {
+	s, err := credential.NewSchemas(kyc.Schema)
+	if err != nil {
+		panic(err)
+	}
+	return s
+}()
+
+var policies = []verification.Policy{{
+	CredentialType: kyc.Type,
+	Require:        []verification.Requirement{{Claim: kyc.ClaimVerified, Equals: true}},
+}}
+
 type approvals struct{}
 
 func (approvals) ConsumeApproval(context.Context, string) (credential.Approval, error) {
-	return credential.Approval{Subject: "user-1", Claims: credential.KYCClaims{KYCVerified: true, Over18: true, Country: "ID"}}, nil
+	return credential.Approval{
+		Subject:        "user-1",
+		CredentialType: kyc.Type,
+		Claims:         map[string]any{kyc.ClaimVerified: true, kyc.ClaimOver18: true, kyc.ClaimCountry: "ID"},
+	}, nil
 }
 
 // TestVerificationAgainstRealChain issues a credential through the real
@@ -45,14 +63,14 @@ func TestVerificationAgainstRealChain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	issuing, err := credential.NewService(signer, approvals{}, time.Hour, nil,
+	issuing, err := credential.NewService(signer, approvals{}, schemas, time.Hour, nil,
 		credential.WithBlockchainClient(client))
 	if err != nil {
 		t.Fatal(err)
 	}
-	local := credential.NewVerifier(nil)
+	local := credential.NewVerifier(schemas, nil)
 	local.Trust(issuerName, pub)
-	verifier := verification.NewService(local, verification.DefaultPolicy, verification.WithBlockchainClient(client))
+	verifier := verification.NewService(local, policies, verification.WithBlockchainClient(client))
 
 	issue := func() (string, [32]byte) {
 		issued, err := issuing.IssueFromApproval(ctx, "a")
@@ -94,7 +112,7 @@ func TestVerificationAgainstRealChain(t *testing.T) {
 	expect(fresh, true, "")
 
 	// Credential never registered on chain: signed locally but unknown to the registry.
-	unregistered, err := credential.NewService(signer, approvals{}, time.Hour, nil)
+	unregistered, err := credential.NewService(signer, approvals{}, schemas, time.Hour, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,7 +126,7 @@ func TestVerificationAgainstRealChain(t *testing.T) {
 	// though the registry knows the issuer.
 	_, otherPriv, _ := ed25519.GenerateKey(rand.Reader)
 	otherSigner, _ := credential.NewSigner(issuerName, otherPriv)
-	rogueIssuing, _ := credential.NewService(otherSigner, approvals{}, time.Hour, nil)
+	rogueIssuing, _ := credential.NewService(otherSigner, approvals{}, schemas, time.Hour, nil)
 	rogue, _ := rogueIssuing.IssueFromApproval(ctx, "a")
 	expect(rogue.Token, false, verification.ReasonUntrustedIssuer)
 }
@@ -119,12 +137,12 @@ func TestVerificationAgainstRealChain(t *testing.T) {
 func TestVerificationFailsClosedWhenChainIsDown(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 	signer, _ := credential.NewSigner("did:example:issuer", priv)
-	issuing, _ := credential.NewService(signer, approvals{}, time.Hour, nil)
+	issuing, _ := credential.NewService(signer, approvals{}, schemas, time.Hour, nil)
 	issued, err := issuing.IssueFromApproval(context.Background(), "a")
 	if err != nil {
 		t.Fatal(err)
 	}
-	local := credential.NewVerifier(nil)
+	local := credential.NewVerifier(schemas, nil)
 	local.Trust("did:example:issuer", pub)
 
 	dead, err := blockchain.NewClient(blockchain.Config{
@@ -137,7 +155,7 @@ func TestVerificationFailsClosedWhenChainIsDown(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res := verification.NewService(local, verification.DefaultPolicy, verification.WithBlockchainClient(dead)).
+	res := verification.NewService(local, policies, verification.WithBlockchainClient(dead)).
 		Verify(context.Background(), issued.Token)
 	if res.Valid || res.Reason != verification.ReasonUnavailable {
 		t.Fatalf("Valid=%v Reason=%q, want rejected as unavailable", res.Valid, res.Reason)

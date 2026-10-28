@@ -1,6 +1,7 @@
-// Package identity simulates KYC outcomes for local development. It must not
-// be wired up as a production approval mechanism.
-package identity
+// Package simulation stands in for an issuer's real approval process (an
+// identity check, a ticket purchase, a membership signup) during local
+// development. It must not be wired up as a production approval mechanism.
+package simulation
 
 import (
 	"context"
@@ -8,14 +9,14 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"regexp"
+	"maps"
 	"strings"
 	"sync"
 
 	"github.com/joshia/tokenized-credential-verifier/internal/credential"
 )
 
-// Outcome is a simulated KYC decision.
+// Outcome is a simulated approval decision.
 type Outcome string
 
 const (
@@ -25,45 +26,48 @@ const (
 
 const maxSubjectLen = 256
 
-var countryRE = regexp.MustCompile(`^[A-Z]{2}$`)
-
 var (
-	ErrInvalidRequest = errors.New("identity: invalid request")
-	ErrNotFound       = errors.New("identity: kyc result not found")
-	ErrNotApproved    = errors.New("identity: kyc result not approved")
-	ErrAlreadyUsed    = errors.New("identity: kyc result already used")
+	ErrInvalidRequest = errors.New("simulation: invalid request")
+	ErrNotFound       = errors.New("simulation: approval not found")
+	ErrNotApproved    = errors.New("simulation: approval was not approved")
+	ErrAlreadyUsed    = errors.New("simulation: approval already used")
 )
 
-// SimulationRequest describes the simulated applicant and the decision to
-// produce. Over18 and Country are ignored for rejected outcomes.
-type SimulationRequest struct {
-	Subject string
-	Outcome Outcome
-	Over18  bool
-	Country string
+// Request describes the simulated subject and the decision to produce. For an
+// approved outcome CredentialType must be a known type and Claims must match its
+// schema. Both are ignored for rejected outcomes.
+type Request struct {
+	Subject        string
+	CredentialType string
+	Outcome        Outcome
+	Claims         map[string]any
 }
 
-// Result is a stored simulated KYC decision.
+// Result is a stored simulated decision.
 type Result struct {
-	ID      string
-	Subject string
-	Outcome Outcome
-	Claims  credential.KYCClaims
-	used    bool
+	ID             string
+	Subject        string
+	CredentialType string
+	Outcome        Outcome
+	Claims         map[string]any
+	used           bool
 }
 
-// Service stores simulated KYC results in memory.
+// Service stores simulated approvals in memory.
 type Service struct {
+	schemas *credential.Schemas
+
 	mu      sync.Mutex
 	results map[string]*Result
 }
 
-func NewService() *Service {
-	return &Service{results: make(map[string]*Result)}
+// NewService returns a Service that validates approved requests against schemas.
+func NewService(schemas *credential.Schemas) *Service {
+	return &Service{schemas: schemas, results: make(map[string]*Result)}
 }
 
-// Simulate validates the request and records a KYC decision.
-func (s *Service) Simulate(_ context.Context, req SimulationRequest) (Result, error) {
+// Simulate validates the request and records a decision.
+func (s *Service) Simulate(_ context.Context, req Request) (Result, error) {
 	subject := strings.TrimSpace(req.Subject)
 	if subject == "" || len(subject) > maxSubjectLen {
 		return Result{}, fmt.Errorf("%w: subject must be 1-%d characters", ErrInvalidRequest, maxSubjectLen)
@@ -71,10 +75,11 @@ func (s *Service) Simulate(_ context.Context, req SimulationRequest) (Result, er
 	r := Result{Subject: subject, Outcome: req.Outcome}
 	switch req.Outcome {
 	case OutcomeApproved:
-		if !countryRE.MatchString(req.Country) {
-			return Result{}, fmt.Errorf("%w: country must be an ISO 3166-1 alpha-2 code such as ID", ErrInvalidRequest)
+		if err := s.schemas.Validate(req.CredentialType, req.Claims); err != nil {
+			return Result{}, fmt.Errorf("%w: %v", ErrInvalidRequest, err)
 		}
-		r.Claims = credential.KYCClaims{KYCVerified: true, Over18: req.Over18, Country: req.Country}
+		r.CredentialType = req.CredentialType
+		r.Claims = maps.Clone(req.Claims)
 	case OutcomeRejected:
 	default:
 		return Result{}, fmt.Errorf("%w: outcome must be approved or rejected", ErrInvalidRequest)
@@ -82,7 +87,7 @@ func (s *Service) Simulate(_ context.Context, req SimulationRequest) (Result, er
 
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		return Result{}, fmt.Errorf("identity: generate id: %w", err)
+		return Result{}, fmt.Errorf("simulation: generate id: %w", err)
 	}
 	r.ID = base64.RawURLEncoding.EncodeToString(b[:])
 
@@ -92,7 +97,7 @@ func (s *Service) Simulate(_ context.Context, req SimulationRequest) (Result, er
 	return r, nil
 }
 
-// ConsumeApproval returns the approval for a KYC result exactly once.
+// ConsumeApproval returns the approval for a simulated decision exactly once.
 func (s *Service) ConsumeApproval(_ context.Context, id string) (credential.Approval, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -106,5 +111,5 @@ func (s *Service) ConsumeApproval(_ context.Context, id string) (credential.Appr
 		return credential.Approval{}, ErrAlreadyUsed
 	}
 	r.used = true
-	return credential.Approval{Subject: r.Subject, Claims: r.Claims}, nil
+	return credential.Approval{Subject: r.Subject, CredentialType: r.CredentialType, Claims: maps.Clone(r.Claims)}, nil
 }

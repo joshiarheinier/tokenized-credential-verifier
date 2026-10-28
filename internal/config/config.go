@@ -21,12 +21,12 @@ const (
 
 // Config is the complete runtime configuration of the API process.
 type Config struct {
-	Env    Environment
-	HTTP   HTTPConfig
-	Log    LogConfig
-	Issuer IssuerConfig
-	KYC    KYCConfig
-	Solana SolanaConfig
+	Env        Environment
+	HTTP       HTTPConfig
+	Log        LogConfig
+	Issuer     IssuerConfig
+	Simulation SimulationConfig
+	Solana     SolanaConfig
 }
 
 // IssuerConfig identifies the credential issuer and its signing key.
@@ -39,11 +39,12 @@ type IssuerConfig struct {
 	CredentialTTL  time.Duration
 }
 
-// KYCConfig controls the simulated KYC flow.
-type KYCConfig struct {
-	// SimulationEnabled exposes the simulated KYC and issuance endpoints.
+// SimulationConfig controls the simulated approval flow used in local
+// development in place of an issuer's real approval process.
+type SimulationConfig struct {
+	// Enabled exposes the simulated approval and issuance endpoints.
 	// It must never be enabled in production.
-	SimulationEnabled bool
+	Enabled bool
 }
 
 // SolanaConfig configures access to the on-chain registry. An empty RPCURL
@@ -106,7 +107,7 @@ func Load(getenv func(string) string) (Config, error) {
 			CredentialTTL:  l.duration("CREDENTIAL_TTL", 30*24*time.Hour),
 		},
 	}
-	cfg.KYC.SimulationEnabled = l.boolean("KYC_SIMULATION_ENABLED", cfg.Env != EnvProduction)
+	cfg.Simulation.Enabled = l.boolean("APPROVAL_SIMULATION_ENABLED", cfg.Env != EnvProduction)
 	cfg.Solana = SolanaConfig{
 		RPCURL:                   l.str("SOLANA_RPC_URL", ""),
 		ProgramID:                l.str("SOLANA_PROGRAM_ID", ""),
@@ -138,8 +139,8 @@ func Load(getenv func(string) string) (Config, error) {
 		if cfg.Solana.Bootstrap {
 			l.fail("SOLANA_BOOTSTRAP", "true", "registry bootstrap must not be enabled in production")
 		}
-		if cfg.KYC.SimulationEnabled {
-			l.fail("KYC_SIMULATION_ENABLED", "true", "simulated KYC must not be enabled in production")
+		if cfg.Simulation.Enabled {
+			l.fail("APPROVAL_SIMULATION_ENABLED", "true", "simulated approvals must not be enabled in production")
 		}
 		if cfg.Issuer.SigningKeySeed == "" {
 			l.fail("ISSUER_SIGNING_KEY_SEED", "", "required in production")
@@ -169,7 +170,7 @@ func (l *loader) validateSolana(cfg Config) {
 	if s.ProgramID == "" {
 		l.fail("SOLANA_PROGRAM_ID", "", "required when SOLANA_RPC_URL is set")
 	}
-	if cfg.KYC.SimulationEnabled && s.IssuerAuthorityKeypair == "" {
+	if cfg.Simulation.Enabled && s.IssuerAuthorityKeypair == "" {
 		l.fail("SOLANA_ISSUER_AUTHORITY_KEYPAIR", "", "required to register issued credentials on chain")
 	}
 	if s.Bootstrap && (s.RegistryAuthorityKeypair == "" || s.IssuerAuthorityKeypair == "") {

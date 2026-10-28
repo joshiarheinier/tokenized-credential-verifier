@@ -12,8 +12,7 @@ Full design: [`docs/td_init_project.md`](docs/td_init_project.md) (written when
 this was a KYC-only project; its KYC framing predates the rename).
 
 **Current status: Phase 3** — signed Ed25519 credentials, the Solana registry
-program, and the Go backend verifying against it. Issuance is still simulated
-KYC.
+program, and the Go backend verifying against it. Issuance uses simulated approvals.
 
 ## Requirements
 
@@ -100,7 +99,7 @@ variable.
 | `ISSUER_ID` | `did:example:issuer-dev` | Issuer identifier placed in the `iss` claim |
 | `ISSUER_SIGNING_KEY_SEED` | *(empty)* | Base64url 32-byte Ed25519 seed (**secret**). Empty = ephemeral key (non-production only). Required in production. |
 | `CREDENTIAL_TTL` | `720h` | Validity period of issued credentials |
-| `KYC_SIMULATION_ENABLED` | `true` (`false` in production) | Enables the simulate/issue endpoints. The process refuses to start with this on in production. |
+| `APPROVAL_SIMULATION_ENABLED` | `true` (`false` in production) | Enables the simulate/issue endpoints. The process refuses to start with this on in production. |
 | `SOLANA_RPC_URL` | *(empty)* | RPC endpoint of the registry cluster. Empty = off-chain checks only (non-production). **Required in production.** |
 | `SOLANA_PROGRAM_ID` | *(empty)* | Deployed registry program id. Required with `SOLANA_RPC_URL`. |
 | `SOLANA_COMMITMENT` | `confirmed` | `confirmed` or `finalized` (used for reads and confirming writes) |
@@ -120,24 +119,24 @@ printed to stdout, the public key and key id to stderr).
 | `GET` | `/healthz` | Liveness: the process is up. Never checks dependencies. |
 | `GET` | `/readyz` | Readiness: runs registered dependency checks (none yet; PostgreSQL and Solana RPC will be added). Returns `503` with per-check `ok`/`fail` if any fails; error details are logged, not returned. |
 
-### Credential endpoints (Phase 1)
+### Credential endpoints
 
 | Method | Path | Description |
 |---|---|---|
-| `POST` | `/v1/kyc/simulate` | **Dev only.** Records a simulated KYC decision. Body: `{"subject","outcome":"approved"\|"rejected","over_18","country"}` (country = ISO alpha-2, required when approved). Returns `201 {"kyc_result_id"}`. |
-| `POST` | `/v1/credentials` | **Dev only.** Body: `{"kyc_result_id"}`. Issues a credential for an approved result, **once** (`404` unknown, `422` rejected, `409` already used). Returns `201 {"credential","expires_at"}`. |
+| `POST` | `/v1/approvals/simulate` | **Dev only.** Records a simulated issuer approval. Body: `{"subject","credential_type","outcome":"approved"\|"rejected","claims":{...}}`. For an approved outcome the type must be one this deployment supports and `claims` must match its schema (`400` otherwise). Returns `201 {"approval_id","outcome"}`. |
+| `POST` | `/v1/credentials` | **Dev only.** Body: `{"approval_id"}`. Issues a credential for an approved result, **once** (`404` unknown, `422` rejected, `409` already used). Returns `201 {"credential","expires_at"}`. |
 | `POST` | `/v1/credentials/verify` | Body: `{"credential"}`. `200` for a well-formed request: `{"valid":true,"issuer","credential_type","expires_at","claims"}` or `{"valid":false,"reason"}`. `503` with `{"valid":false,"reason":"verification_unavailable"}` when the on-chain registry could not be read (the credential is not accepted). |
 
 Verification `reason` codes: `malformed`, `unsupported`, `untrusted_issuer`,
-`invalid_signature`, `expired`, `not_yet_valid`, `policy_not_satisfied`, and with
+`invalid_signature`, `expired`, `not_yet_valid`, `policy_not_satisfied` (`unsupported` also covers a credential type this deployment has no policy for), and with
 the registry enabled `not_registered`, `revoked`, `verification_unavailable`. The
 subject and credential id are not returned to the verifying application.
 
 Try it:
 
 ```sh
-ID=$(curl -s localhost:8080/v1/kyc/simulate -d '{"subject":"user-1","outcome":"approved","over_18":true,"country":"ID"}' | sed 's/.*"kyc_result_id":"\([^"]*\)".*/\1/')
-CRED=$(curl -s localhost:8080/v1/credentials -d "{\"kyc_result_id\":\"$ID\"}" | sed 's/.*"credential":"\([^"]*\)".*/\1/')
+ID=$(curl -s localhost:8080/v1/approvals/simulate -d '{"subject":"user-1","credential_type":"KYCStatus","outcome":"approved","claims":{"kyc_verified":true,"over_18":true,"country":"ID"}}' | sed 's/.*"approval_id":"\([^"]*\)".*/\1/')
+CRED=$(curl -s localhost:8080/v1/credentials -d "{\"approval_id\":\"$ID\"}" | sed 's/.*"credential":"\([^"]*\)".*/\1/')
 curl -s localhost:8080/v1/credentials/verify -d "{\"credential\":\"$CRED\"}"
 ```
 
@@ -150,10 +149,16 @@ Verifiable Credential but **does not claim W3C conformance**. The verifier
 accepts only `EdDSA`, looks up the key by `kid` among trusted issuer keys,
 checks the signature *before* reading claims, rejects unknown fields,
 unsupported versions/types, expired or not-yet-valid credentials, and
-credentials whose `iss` does not match the key's issuer. Claims are coarse
-(`kyc_verified`, `over_18`, `country`); no names, birthdates or documents.
+credentials whose `iss` does not match the key's issuer.
 
-Limitations: the simulated KYC store is in memory (lost on restart),
+What a credential attests depends on its `credential_type`. Each type has a
+schema listing its claims and their kinds, and claims outside the schema are
+rejected, so an issuer cannot attach extra (possibly personal) data. KYC status
+(`kyc_verified`, `over_18`, `country`) is the first type; others can be added
+without touching the credential, verification or registry code. See
+[`docs/credential_types.md`](docs/credential_types.md).
+
+Limitations: the simulated approval store is in memory (lost on restart),
 and the verifier's local key set is only this process's own issuer key (the
 registry is checked on top of it, but does not yet supply other issuers' keys).
 
@@ -165,9 +170,10 @@ internal/app/         Wires dependencies; owns server lifecycle and graceful shu
 internal/config/      Environment-variable configuration with validation
 internal/httpapi/     Router, middleware (request logging, panic recovery), handlers
 internal/logging/     slog logger construction
-internal/credential/  Credential model, Ed25519 signer, verifier, issuing service (no chain dependency)
+internal/credential/  Credential model, schemas, Ed25519 signer, verifier, issuing service
+internal/credential/kyc/ The KYCStatus credential type (first registered type)
 internal/issuer/      Issuer identity and signing-key loading
-internal/identity/    Simulated KYC decisions (dev only, in memory)
+internal/simulation/  Simulated issuer approvals (dev only, in memory)
 internal/verification/ Acceptance policy, on-chain checks and coarse rejection reasons
 pkg/connector/blockchain/ Connector to the Solana registry program (only package importing the SDK; no dependency on internal/)
 contracts/credential-registry/ Anchor program (trust registry)

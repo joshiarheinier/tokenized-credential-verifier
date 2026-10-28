@@ -14,21 +14,23 @@ type trustedKey struct {
 	key    ed25519.PublicKey
 }
 
-// Verifier checks the signature and validity period of credentials against a
-// fixed set of trusted issuer keys. It does not consult the blockchain; issuer
-// trust on Solana is layered on top in a later phase.
+// Verifier checks the signature, structure and validity period of credentials
+// against a fixed set of trusted issuer keys and the credential types in
+// schemas. It does not consult the blockchain; issuer trust and status on
+// Solana are layered on top by the verification package.
 type Verifier struct {
-	keys map[string]trustedKey // by key id
-	now  func() time.Time
+	keys    map[string]trustedKey // by key id
+	schemas *Schemas
+	now     func() time.Time
 }
 
-// NewVerifier returns a Verifier with no trusted keys. now may be nil to use
-// the wall clock.
-func NewVerifier(now func() time.Time) *Verifier {
+// NewVerifier returns a Verifier with no trusted keys that accepts only the
+// credential types in schemas. now may be nil to use the wall clock.
+func NewVerifier(schemas *Schemas, now func() time.Time) *Verifier {
 	if now == nil {
 		now = time.Now
 	}
-	return &Verifier{keys: make(map[string]trustedKey), now: now}
+	return &Verifier{keys: make(map[string]trustedKey), schemas: schemas, now: now}
 }
 
 // Trust adds an issuer's verification key.
@@ -95,8 +97,8 @@ func (v *Verifier) VerifyWithKey(token string) (*Claims, ed25519.PublicKey, erro
 	if c.Issuer != tk.issuer {
 		return nil, nil, ErrUnknownIssuer
 	}
-	if c.CredentialType != TypeKYCStatus {
-		return nil, nil, ErrUnsupportedType
+	if err = v.schemas.Validate(c.CredentialType, c.Attributes); err != nil {
+		return nil, nil, err
 	}
 	if c.ID == "" || c.Subject == "" || c.ExpiresAt == 0 {
 		return nil, nil, fmt.Errorf("%w: missing required claim", ErrMalformed)

@@ -17,7 +17,31 @@ var now = time.Unix(1_793_000_000, 0)
 const (
 	issuerName = "did:example:issuer"
 	credID     = "cred-1"
+
+	// A made-up credential type: verification must work for any registered
+	// type, not just KYC.
+	testType = "Membership"
 )
+
+var testSchemas = func() *credential.Schemas {
+	s, err := credential.NewSchemas(credential.Schema{
+		Type: testType,
+		Fields: []credential.Field{
+			{Name: "tier", Kind: credential.String, Required: true},
+			{Name: "active", Kind: credential.Bool, Required: true},
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
+	return s
+}()
+
+// testPolicies accepts active memberships.
+var testPolicies = []Policy{{
+	CredentialType: testType,
+	Require:        []Requirement{{Claim: "active", Equals: true}},
+}}
 
 type fakeBlockchainClient struct {
 	issuer    blockchain.IssuerRecord
@@ -58,13 +82,13 @@ func newFixture(t *testing.T) *fixture {
 		ID:             credID,
 		IssuedAt:       now.Unix(),
 		ExpiresAt:      now.Add(time.Hour).Unix(),
-		CredentialType: credential.TypeKYCStatus,
-		KYC:            credential.KYCClaims{KYCVerified: true},
+		CredentialType: testType,
+		Attributes:     map[string]any{"tier": "gold", "active": true},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	v := credential.NewVerifier(func() time.Time { return now })
+	v := credential.NewVerifier(testSchemas, func() time.Time { return now })
 	v.Trust(issuerName, pub)
 
 	issuerID := blockchain.IssuerID(issuerName)
@@ -77,7 +101,7 @@ func newFixture(t *testing.T) *fixture {
 			ExpiresAt: now.Add(time.Hour),
 		},
 	}
-	svc := NewService(v, DefaultPolicy, WithBlockchainClient(reg), WithClock(func() time.Time { return now }))
+	svc := NewService(v, testPolicies, WithBlockchainClient(reg), WithClock(func() time.Time { return now }))
 	return &fixture{svc: svc, token: token, reg: reg, pub: pub}
 }
 
@@ -114,7 +138,7 @@ func TestChainRejections(t *testing.T) {
 			if res.Valid || res.Reason != tc.want {
 				t.Fatalf("Valid=%v Reason=%q, want rejected with %q", res.Valid, res.Reason, tc.want)
 			}
-			if res.Claims != (credential.KYCClaims{}) || res.Issuer != "" {
+			if len(res.Claims) != 0 || res.Issuer != "" {
 				t.Fatalf("rejected result leaked claims: %+v", res)
 			}
 		})
@@ -159,7 +183,7 @@ func TestLocalFailuresDoNotConsultTheChain(t *testing.T) {
 func TestWithoutRegistryOnlyLocalChecksApply(t *testing.T) {
 	f := newFixture(t)
 	f.reg.issuerErr = blockchain.ErrUnavailable
-	svc := NewService(credentialVerifier(t, f), DefaultPolicy)
+	svc := NewService(credentialVerifier(t, f), testPolicies)
 	if res := svc.Verify(context.Background(), f.token); !res.Valid {
 		t.Fatalf("Valid = false (%s), want true without a registry", res.Reason)
 	}
@@ -167,7 +191,7 @@ func TestWithoutRegistryOnlyLocalChecksApply(t *testing.T) {
 
 func credentialVerifier(t *testing.T, f *fixture) *credential.Verifier {
 	t.Helper()
-	v := credential.NewVerifier(func() time.Time { return now })
+	v := credential.NewVerifier(testSchemas, func() time.Time { return now })
 	v.Trust(issuerName, f.pub)
 	return v
 }

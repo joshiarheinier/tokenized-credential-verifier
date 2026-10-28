@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -14,6 +15,27 @@ import (
 )
 
 var fixedNow = time.Unix(1_793_000_000, 0)
+
+// The credential package knows nothing about any particular credential type;
+// these tests use a made-up one to prove it.
+const testType = "TestPass"
+
+var testSchemas = mustSchemas(Schema{
+	Type: testType,
+	Fields: []Field{
+		{Name: "tier", Kind: String, Required: true},
+		{Name: "vip", Kind: Bool, Required: true},
+		{Name: "seats", Kind: Number},
+	},
+})
+
+func mustSchemas(s ...Schema) *Schemas {
+	set, err := NewSchemas(s...)
+	if err != nil {
+		panic(err)
+	}
+	return set
+}
 
 func newKey(t *testing.T) ed25519.PrivateKey {
 	t.Helper()
@@ -39,13 +61,13 @@ func validClaims() Claims {
 		ID:             "cred-1",
 		IssuedAt:       fixedNow.Unix(),
 		ExpiresAt:      fixedNow.Add(time.Hour).Unix(),
-		CredentialType: TypeKYCStatus,
-		KYC:            KYCClaims{KYCVerified: true, Over18: true, Country: "ID"},
+		CredentialType: testType,
+		Attributes:     map[string]any{"tier": "gold", "vip": true},
 	}
 }
 
 func verifierTrusting(s *Signer, now time.Time) *Verifier {
-	v := NewVerifier(func() time.Time { return now })
+	v := NewVerifier(testSchemas, func() time.Time { return now })
 	v.Trust(s.IssuerID(), s.PublicKey())
 	return v
 }
@@ -70,7 +92,7 @@ func TestSignVerifyRoundTrip(t *testing.T) {
 	}
 	want := validClaims()
 	want.Issuer, want.Version = s.IssuerID(), FormatVersion
-	if *got != want {
+	if !reflect.DeepEqual(*got, want) {
 		t.Errorf("claims = %+v, want %+v", *got, want)
 	}
 }
@@ -99,7 +121,7 @@ func TestTamperedPayloadFails(t *testing.T) {
 	if err := json.Unmarshal(raw, &m); err != nil {
 		t.Fatal(err)
 	}
-	m["claims"].(map[string]any)["country"] = "KP"
+	m["claims"].(map[string]any)["tier"] = "silver"
 	forged, _ := json.Marshal(m)
 
 	tampered := parts[0] + "." + b64.EncodeToString(forged) + "." + parts[2]
@@ -156,7 +178,7 @@ func TestUnknownKeyRejected(t *testing.T) {
 
 func TestKeyIssuerMismatchRejected(t *testing.T) {
 	s := newSigner(t)
-	v := NewVerifier(func() time.Time { return fixedNow })
+	v := NewVerifier(testSchemas, func() time.Time { return fixedNow })
 	v.Trust("did:example:other", s.PublicKey()) // key trusted only for a different issuer
 	token, _ := s.Sign(validClaims())
 	if _, err := v.Verify(token); !errors.Is(err, ErrUnknownIssuer) {
@@ -229,6 +251,10 @@ func TestSignedButInvalidClaimsRejected(t *testing.T) {
 	}{
 		"wrong version":  {base(func(c *Claims) { c.Version = 2 }), ErrUnsupportedVersion},
 		"wrong type":     {base(func(c *Claims) { c.CredentialType = "Other" }), ErrUnsupportedType},
+		"missing claim":  {base(func(c *Claims) { c.Attributes = map[string]any{"tier": "gold"} }), ErrInvalidClaims},
+		"wrong kind":     {base(func(c *Claims) { c.Attributes = map[string]any{"tier": 1, "vip": true} }), ErrInvalidClaims},
+		"extra claim":    {base(func(c *Claims) { c.Attributes = map[string]any{"tier": "gold", "vip": true, "name": "Ada"} }), ErrInvalidClaims},
+		"no claims":      {base(func(c *Claims) { c.Attributes = nil }), ErrMalformed},
 		"wrong issuer":   {base(func(c *Claims) { c.Issuer = "did:example:evil" }), ErrUnknownIssuer},
 		"missing jti":    {base(func(c *Claims) { c.ID = "" }), ErrMalformed},
 		"missing sub":    {base(func(c *Claims) { c.Subject = "" }), ErrMalformed},
@@ -265,8 +291,8 @@ func (f *fakeApprovals) ConsumeApproval(context.Context, string) (Approval, erro
 
 func TestServiceIssueFromApproval(t *testing.T) {
 	s := newSigner(t)
-	src := &fakeApprovals{approval: Approval{Subject: "user-1", Claims: KYCClaims{KYCVerified: true, Country: "ID"}}}
-	svc, err := NewService(s, src, 24*time.Hour, func() time.Time { return fixedNow })
+	src := &fakeApprovals{approval: Approval{Subject: "user-1", CredentialType: testType, Claims: map[string]any{"tier": "gold", "vip": false}}}
+	svc, err := NewService(s, src, testSchemas, 24*time.Hour, func() time.Time { return fixedNow })
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -281,7 +307,7 @@ func TestServiceIssueFromApproval(t *testing.T) {
 	if err != nil {
 		t.Fatalf("issued credential does not verify: %v", err)
 	}
-	if c.Subject != "user-1" || !c.KYC.KYCVerified || c.KYC.Country != "ID" || c.ID == "" {
+	if c.Subject != "user-1" || c.CredentialType != testType || c.Attributes["tier"] != "gold" || c.Attributes["vip"] != false || c.ID == "" {
 		t.Errorf("claims = %+v", c)
 	}
 
@@ -294,7 +320,7 @@ func TestServiceIssueFromApproval(t *testing.T) {
 
 func TestServicePropagatesApprovalErrors(t *testing.T) {
 	sentinel := errors.New("not approved")
-	svc, _ := NewService(newSigner(t), &fakeApprovals{err: sentinel}, time.Hour, nil)
+	svc, _ := NewService(newSigner(t), &fakeApprovals{err: sentinel}, testSchemas, time.Hour, nil)
 	if _, err := svc.IssueFromApproval(context.Background(), "x"); !errors.Is(err, sentinel) {
 		t.Fatalf("err = %v, want %v", err, sentinel)
 	}
@@ -302,13 +328,16 @@ func TestServicePropagatesApprovalErrors(t *testing.T) {
 
 func TestNewServiceValidation(t *testing.T) {
 	s := newSigner(t)
-	if _, err := NewService(nil, &fakeApprovals{}, time.Hour, nil); err == nil {
+	if _, err := NewService(nil, &fakeApprovals{}, testSchemas, time.Hour, nil); err == nil {
 		t.Error("nil signer accepted")
 	}
-	if _, err := NewService(s, nil, time.Hour, nil); err == nil {
+	if _, err := NewService(s, nil, testSchemas, time.Hour, nil); err == nil {
 		t.Error("nil approvals accepted")
 	}
-	if _, err := NewService(s, &fakeApprovals{}, 0, nil); err == nil {
+	if _, err := NewService(s, &fakeApprovals{}, nil, time.Hour, nil); err == nil {
+		t.Error("nil schemas accepted")
+	}
+	if _, err := NewService(s, &fakeApprovals{}, testSchemas, 0, nil); err == nil {
 		t.Error("zero ttl accepted")
 	}
 }
@@ -331,8 +360,8 @@ func (f *fakeBlockchainClient) RegisterCredential(_ context.Context, issuerID, r
 func TestServiceRegistersCredentialBeforeReturningIt(t *testing.T) {
 	s := newSigner(t)
 	reg := &fakeBlockchainClient{}
-	src := &fakeApprovals{approval: Approval{Subject: "user-1", Claims: KYCClaims{KYCVerified: true}}}
-	svc, _ := NewService(s, src, time.Hour, func() time.Time { return fixedNow }, WithBlockchainClient(reg))
+	src := &fakeApprovals{approval: Approval{Subject: "user-1", CredentialType: testType, Claims: map[string]any{"tier": "gold", "vip": true}}}
+	svc, _ := NewService(s, src, testSchemas, time.Hour, func() time.Time { return fixedNow }, WithBlockchainClient(reg))
 
 	issued, err := svc.IssueFromApproval(context.Background(), "approval-1")
 	if err != nil {
@@ -355,8 +384,8 @@ func TestServiceRegistersCredentialBeforeReturningIt(t *testing.T) {
 
 func TestServiceReturnsNoCredentialWhenRegistrationFails(t *testing.T) {
 	boom := errors.New("chain down")
-	src := &fakeApprovals{approval: Approval{Subject: "user-1", Claims: KYCClaims{KYCVerified: true}}}
-	svc, _ := NewService(newSigner(t), src, time.Hour, nil, WithBlockchainClient(&fakeBlockchainClient{err: boom}))
+	src := &fakeApprovals{approval: Approval{Subject: "user-1", CredentialType: testType, Claims: map[string]any{"tier": "gold", "vip": true}}}
+	svc, _ := NewService(newSigner(t), src, testSchemas, time.Hour, nil, WithBlockchainClient(&fakeBlockchainClient{err: boom}))
 
 	issued, err := svc.IssueFromApproval(context.Background(), "approval-1")
 	if !errors.Is(err, boom) || issued.Token != "" {
@@ -366,7 +395,7 @@ func TestServiceReturnsNoCredentialWhenRegistrationFails(t *testing.T) {
 
 func TestServiceDoesNotRegisterForInvalidApprovals(t *testing.T) {
 	reg := &fakeBlockchainClient{}
-	svc, _ := NewService(newSigner(t), &fakeApprovals{err: errors.New("not approved")}, time.Hour, nil, WithBlockchainClient(reg))
+	svc, _ := NewService(newSigner(t), &fakeApprovals{err: errors.New("not approved")}, testSchemas, time.Hour, nil, WithBlockchainClient(reg))
 	if _, err := svc.IssueFromApproval(context.Background(), "x"); err == nil {
 		t.Fatal("want error")
 	}

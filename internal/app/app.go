@@ -13,9 +13,10 @@ import (
 
 	"github.com/joshia/tokenized-credential-verifier/internal/config"
 	"github.com/joshia/tokenized-credential-verifier/internal/credential"
+	"github.com/joshia/tokenized-credential-verifier/internal/credential/kyc"
 	"github.com/joshia/tokenized-credential-verifier/internal/httpapi"
-	"github.com/joshia/tokenized-credential-verifier/internal/identity"
 	"github.com/joshia/tokenized-credential-verifier/internal/issuer"
+	"github.com/joshia/tokenized-credential-verifier/internal/simulation"
 	"github.com/joshia/tokenized-credential-verifier/internal/verification"
 	"github.com/joshia/tokenized-credential-verifier/pkg/connector/blockchain"
 )
@@ -91,18 +92,22 @@ func buildAPI(cfg config.Config, logger *slog.Logger) (httpapi.API, error) {
 		logger.Warn("SOLANA_RPC_URL not set: credentials are verified off-chain only, with no issuer trust or revocation check")
 	}
 
-	verifier := credential.NewVerifier(nil)
+	schemas, policies, err := credentialTypes()
+	if err != nil {
+		return httpapi.API{}, err
+	}
+	verifier := credential.NewVerifier(schemas, nil)
 	verifier.Trust(iss.ID, iss.Signer.PublicKey())
-	api := httpapi.API{CredentialVerification: verification.NewService(verifier, verification.DefaultPolicy, verifyOpts...)}
+	api := httpapi.API{CredentialVerification: verification.NewService(verifier, policies, verifyOpts...)}
 
-	if cfg.KYC.SimulationEnabled {
-		logger.Warn("simulated KYC is enabled: for local development only")
-		kyc := identity.NewService()
-		issuing, err := credential.NewService(iss.Signer, kyc, cfg.Issuer.CredentialTTL, nil, issueOpts...)
+	if cfg.Simulation.Enabled {
+		logger.Warn("simulated approvals are enabled: for local development only")
+		approvals := simulation.NewService(schemas)
+		issuing, err := credential.NewService(iss.Signer, approvals, schemas, cfg.Issuer.CredentialTTL, nil, issueOpts...)
 		if err != nil {
 			return httpapi.API{}, err
 		}
-		api.KYCSimulation = kyc
+		api.ApprovalSimulation = approvals
 		api.CredentialIssuance = issuing
 	}
 	return api, nil
@@ -165,4 +170,23 @@ func bootstrapRegistry(chain *blockchain.Client, iss *issuer.Issuer, txTimeout t
 	}
 	logger.Warn("registry bootstrap enabled: for local development only", "issuer", iss.ID, "issuer_registered_now", res.Changed)
 	return nil
+}
+
+// credentialTypes declares which credential types this deployment understands
+// and what it requires of each. To support another type (a ticket, a membership)
+// add its Schema here and a Policy saying which claims this application demands;
+// nothing else in the credential, verification or registry code changes. See
+// docs/credential_types.md.
+func credentialTypes() (*credential.Schemas, []verification.Policy, error) {
+	schemas, err := credential.NewSchemas(kyc.Schema)
+	if err != nil {
+		return nil, nil, fmt.Errorf("credential types: %w", err)
+	}
+	policies := []verification.Policy{
+		{
+			CredentialType: kyc.Type,
+			Require:        []verification.Requirement{{Claim: kyc.ClaimVerified, Equals: true}},
+		},
+	}
+	return schemas, policies, nil
 }

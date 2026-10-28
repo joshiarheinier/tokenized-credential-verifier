@@ -1,4 +1,4 @@
-// Command api runs the KYC credential backend HTTP server.
+// Command api runs the credential verifier backend HTTP server.
 package main
 
 import (

@@ -76,7 +76,7 @@ func TestLoadRejectsInvalidValues(t *testing.T) {
 	}
 }
 
-func TestLoadIssuerAndKYCDefaults(t *testing.T) {
+func TestLoadIssuerAndSimulationDefaults(t *testing.T) {
 	cfg, err := Load(env(nil))
 	if err != nil {
 		t.Fatalf("Load: %v", err)
@@ -84,17 +84,17 @@ func TestLoadIssuerAndKYCDefaults(t *testing.T) {
 	if cfg.Issuer.ID == "" || cfg.Issuer.CredentialTTL != 30*24*time.Hour {
 		t.Errorf("Issuer = %+v", cfg.Issuer)
 	}
-	if !cfg.KYC.SimulationEnabled {
+	if !cfg.Simulation.Enabled {
 		t.Error("simulation should default to enabled in development")
 	}
 }
 
 func TestLoadProductionGuards(t *testing.T) {
-	_, err := Load(env(map[string]string{"APP_ENV": "production", "KYC_SIMULATION_ENABLED": "true"}))
+	_, err := Load(env(map[string]string{"APP_ENV": "production", "APPROVAL_SIMULATION_ENABLED": "true"}))
 	if err == nil {
 		t.Fatal("want error for simulation + missing seed in production")
 	}
-	for _, key := range []string{"KYC_SIMULATION_ENABLED", "ISSUER_SIGNING_KEY_SEED"} {
+	for _, key := range []string{"APPROVAL_SIMULATION_ENABLED", "ISSUER_SIGNING_KEY_SEED"} {
 		if !strings.Contains(err.Error(), key) {
 			t.Errorf("error %q does not mention %s", err, key)
 		}
@@ -104,7 +104,7 @@ func TestLoadProductionGuards(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if cfg.KYC.SimulationEnabled {
+	if cfg.Simulation.Enabled {
 		t.Error("simulation must default to disabled in production")
 	}
 }
@@ -128,12 +128,12 @@ func TestSolanaValidation(t *testing.T) {
 		env     map[string]string
 		wantErr string // substring naming the offending variable; empty = valid
 	}{
-		{"url without program id", map[string]string{"SOLANA_RPC_URL": url, "KYC_SIMULATION_ENABLED": "false"}, "SOLANA_PROGRAM_ID"},
+		{"url without program id", map[string]string{"SOLANA_RPC_URL": url, "APPROVAL_SIMULATION_ENABLED": "false"}, "SOLANA_PROGRAM_ID"},
 		{"issuance without issuer authority", map[string]string{"SOLANA_RPC_URL": url, "SOLANA_PROGRAM_ID": "p"}, "SOLANA_ISSUER_AUTHORITY_KEYPAIR"},
 		{"bootstrap without url", map[string]string{"SOLANA_BOOTSTRAP": "true"}, "SOLANA_BOOTSTRAP"},
 		{"bootstrap without keypairs", map[string]string{"SOLANA_RPC_URL": url, "SOLANA_PROGRAM_ID": "p", "SOLANA_ISSUER_AUTHORITY_KEYPAIR": "i", "SOLANA_BOOTSTRAP": "true"}, "SOLANA_BOOTSTRAP"},
 		{"processed commitment is refused", map[string]string{"SOLANA_COMMITMENT": "processed"}, "SOLANA_COMMITMENT"},
-		{"verification-only needs no keys", map[string]string{"SOLANA_RPC_URL": url, "SOLANA_PROGRAM_ID": "p", "KYC_SIMULATION_ENABLED": "false"}, ""},
+		{"verification-only needs no keys", map[string]string{"SOLANA_RPC_URL": url, "SOLANA_PROGRAM_ID": "p", "APPROVAL_SIMULATION_ENABLED": "false"}, ""},
 		{"full dev setup", map[string]string{"SOLANA_RPC_URL": url, "SOLANA_PROGRAM_ID": "p", "SOLANA_ISSUER_AUTHORITY_KEYPAIR": "i", "SOLANA_REGISTRY_AUTHORITY_KEYPAIR": "r", "SOLANA_BOOTSTRAP": "true", "ISSUER_SIGNING_KEY_SEED": "s"}, ""},
 		{"bootstrap with an ephemeral issuer key", map[string]string{"SOLANA_RPC_URL": url, "SOLANA_PROGRAM_ID": "p", "SOLANA_ISSUER_AUTHORITY_KEYPAIR": "i", "SOLANA_REGISTRY_AUTHORITY_KEYPAIR": "r", "SOLANA_BOOTSTRAP": "true"}, "ISSUER_SIGNING_KEY_SEED"},
 	}

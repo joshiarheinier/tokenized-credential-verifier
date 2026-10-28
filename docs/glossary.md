@@ -8,7 +8,7 @@ Shared vocabulary for this project. Where this file and `td_init_project.md` dis
 |---|---|---|
 | **Registry** | Not a person. The on-chain list of trusted issuers and credential statuses. | The Anchor program in `contracts/credential-registry` |
 | **Registry authority** | The administrator of the registry. Decides which issuers are trusted. | One Solana key, `RegistryConfig.authority`. In practice whoever runs the trust framework (a consortium operator or platform owner). |
-| **Issuer** | An organization that performs KYC and vouches for users, such as a bank or KYC provider. | An `IssuerRecord`, identified by `issuer_id`, either active or suspended |
+| **Issuer** | An organization that decides who is eligible for a credential and vouches for them, such as a bank doing KYC, a ticket seller or a membership programme. | An `IssuerRecord`, identified by `issuer_id`, either active or suspended |
 | **Issuer signing key** | The Ed25519 key an issuer signs credentials with. Used only by verifiers, off-chain. | `IssuerRecord.issuer_signing_key`. The program never uses it. |
 | **Issuer authority** | The Solana key an issuer uses to write to the registry (register and revoke its own credentials). | `IssuerRecord.authority`. Kept separate from the signing key (TD §4.2). |
 | **Upgrade authority** | The key that deployed the program and can upgrade it. Solana tracks this, not our code. | The only key that may call `initialize_registry`. |
@@ -21,7 +21,7 @@ The registry authority decides who counts as a trusted issuer. An issuer decides
 
 | Term | What it is |
 |---|---|
-| **Credential** | The signed statement about a user (for example "KYC verified"). Lives off-chain, in the user's wallet. Signed by the issuer. |
+| **Credential** | The signed statement about a subject (for example "KYC verified", "holds a gold membership"). Lives off-chain, in the user's wallet. Signed by the issuer. |
 | **`credential_ref`** | A random, opaque 32-byte ID for one credential. It is the only credential identifier on-chain, and it must never be derived from personal data. |
 | **Credential status** | The on-chain record for one `credential_ref`: issuer, active/revoked, and expiry. Contains no personal data. |
 | **Revoked** | Permanently deactivated by the issuer authority or registry authority. Irreversible. Re-verification means issuing a new credential. |

@@ -38,7 +38,7 @@ type Result struct {
 	Issuer         string
 	CredentialType string
 	ExpiresAt      time.Time
-	Claims         credential.KYCClaims
+	Claims         map[string]any
 }
 
 // BlockchainClient is the part of the Solana connector's client
@@ -51,11 +51,12 @@ type BlockchainClient interface {
 	GetCredentialStatus(ctx context.Context, ref [32]byte) (blockchain.CredentialStatus, error)
 }
 
-// Service verifies credentials against a policy and, when a BlockchainClient is
-// configured, against the issuer and credential status recorded on chain.
+// Service verifies credentials against per-type policies and, when a
+// BlockchainClient is configured, against the issuer and credential status
+// recorded on chain.
 type Service struct {
 	verifier *credential.Verifier
-	policy   Policy
+	policies map[string]Policy // by credential type
 	chain    BlockchainClient
 	now      func() time.Time
 }
@@ -71,8 +72,14 @@ func WithBlockchainClient(c BlockchainClient) Option { return func(s *Service) {
 // WithClock overrides the wall clock used for on-chain expiry checks.
 func WithClock(now func() time.Time) Option { return func(s *Service) { s.now = now } }
 
-func NewService(v *credential.Verifier, p Policy, opts ...Option) *Service {
-	s := &Service{verifier: v, policy: p, now: time.Now}
+// NewService returns a Service that accepts only the credential types it has a
+// policy for; a credential of any other type is rejected as unsupported. If
+// several policies name the same type the last one wins.
+func NewService(v *credential.Verifier, policies []Policy, opts ...Option) *Service {
+	s := &Service{verifier: v, policies: make(map[string]Policy, len(policies)), now: time.Now}
+	for _, p := range policies {
+		s.policies[p.CredentialType] = p
+	}
 	for _, o := range opts {
 		o(s)
 	}
@@ -90,7 +97,11 @@ func (s *Service) Verify(ctx context.Context, token string) Result {
 	if err != nil {
 		return Result{Reason: reasonFor(err)}
 	}
-	if !s.policy.Satisfied(c.KYC) {
+	policy, ok := s.policies[c.CredentialType]
+	if !ok {
+		return Result{Reason: ReasonUnsupported}
+	}
+	if !policy.Satisfied(c.Attributes) {
 		return Result{Reason: ReasonPolicyNotSatisfied}
 	}
 	if s.chain != nil {
@@ -103,7 +114,7 @@ func (s *Service) Verify(ctx context.Context, token string) Result {
 		Issuer:         c.Issuer,
 		CredentialType: c.CredentialType,
 		ExpiresAt:      time.Unix(c.ExpiresAt, 0).UTC(),
-		Claims:         c.KYC,
+		Claims:         policy.disclosed(c.Attributes),
 	}
 }
 
