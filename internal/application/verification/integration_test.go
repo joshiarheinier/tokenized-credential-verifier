@@ -114,7 +114,7 @@ func TestVerificationAgainstRealChain(t *testing.T) {
 	expect(fresh, true, "")
 
 	// Credential never registered on chain: signed locally but unknown to the registry.
-	unregistered, err := credential.NewService(signer, approvals{}, schemas, time.Hour, nil)
+	unregistered, err := issuance.NewService(signer, approvals{}, schemas, time.Hour, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func TestVerificationAgainstRealChain(t *testing.T) {
 	// though the registry knows the issuer.
 	_, otherPriv, _ := ed25519.GenerateKey(rand.Reader)
 	otherSigner, _ := credential.NewSigner(issuerName, otherPriv)
-	rogueIssuing, _ := credential.NewService(otherSigner, approvals{}, schemas, time.Hour, nil)
+	rogueIssuing, _ := issuance.NewService(otherSigner, approvals{}, schemas, time.Hour, nil)
 	rogue, _ := rogueIssuing.IssueFromApproval(ctx, "a")
 	expect(rogue.Token, false, verification.ReasonUntrustedIssuer)
 }
@@ -139,7 +139,7 @@ func TestVerificationAgainstRealChain(t *testing.T) {
 func TestVerificationFailsClosedWhenChainIsDown(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
 	signer, _ := credential.NewSigner("did:example:issuer", priv)
-	issuing, _ := credential.NewService(signer, approvals{}, schemas, time.Hour, nil)
+	issuing, _ := issuance.NewService(signer, approvals{}, schemas, time.Hour, nil)
 	issued, err := issuing.IssueFromApproval(context.Background(), "a")
 	if err != nil {
 		t.Fatal(err)

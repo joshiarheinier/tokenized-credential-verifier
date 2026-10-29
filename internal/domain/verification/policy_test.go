@@ -34,7 +34,7 @@ func TestPolicyWithNoRequirementsAcceptsAnyClaims(t *testing.T) {
 func TestDisclosure(t *testing.T) {
 	claims := map[string]any{"tier": "gold", "active": true}
 
-	all := Policy{}.disclosed(claims)
+	all := Policy{}.Disclosed(claims)
 	if len(all) != 2 {
 		t.Errorf("nil Disclose returned %v, want every claim", all)
 	}
@@ -43,11 +43,11 @@ func TestDisclosure(t *testing.T) {
 		t.Error("disclosed claims alias the original map")
 	}
 
-	only := Policy{Disclose: []string{"active", "not-present"}}.disclosed(claims)
+	only := Policy{Disclose: []string{"active", "not-present"}}.Disclosed(claims)
 	if len(only) != 1 || only["active"] != true {
 		t.Errorf("Disclose=[active] returned %v", only)
 	}
-	if none := (Policy{Disclose: []string{}}).disclosed(claims); len(none) != 0 {
+	if none := (Policy{Disclose: []string{}}).Disclosed(claims); len(none) != 0 {
 		t.Errorf("empty (non-nil) Disclose returned %v, want no claims", none)
 	}
 }
