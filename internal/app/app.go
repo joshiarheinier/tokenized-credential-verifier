@@ -12,14 +12,14 @@ import (
 	"time"
 
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/approval"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/credential"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/verification"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/config"
 	domaincredential "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
-	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/credential"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential/kyc"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/httpapi"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/issuer"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/verification"
+	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/httpapi"
 	"github.com/joshiarheinier/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 

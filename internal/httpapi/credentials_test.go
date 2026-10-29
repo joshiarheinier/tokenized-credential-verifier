@@ -13,13 +13,13 @@ import (
 	"time"
 
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/approval"
-	domaincredential "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/credential"
-	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential/kyc"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/httpapi"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/issuer"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/verification"
+	domaincredential "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential/kyc"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/issuer"
+	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/httpapi"
 )
 
 var startTime = time.Unix(1_793_000_000, 0)
@@ -57,7 +57,7 @@ func newEnv(t *testing.T, withIssuance bool) *testEnv {
 	}
 	policies := []domainverification.Policy{
 		{CredentialType: kyc.Type, Require: []domainverification.Requirement{{Claim: kyc.ClaimVerified, Equals: true}}},
-		{CredentialType: membershipType, Require: []verification.Requirement{{Claim: "tier", Equals: "gold"}}, Disclose: []string{"tier"}},
+		{CredentialType: membershipType, Require: []domainverification.Requirement{{Claim: "tier", Equals: "gold"}}, Disclose: []string{"tier"}},
 	}
 	v := domaincredential.NewVerifier(schemas, clock)
 	v.Trust(iss.ID, iss.Signer.PublicKey())
