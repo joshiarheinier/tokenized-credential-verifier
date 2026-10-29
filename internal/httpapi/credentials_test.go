@@ -14,6 +14,8 @@ import (
 
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/approval"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
+	issuance "github.com/joshiarheinier/tokenized-credential-verifier/internal/application/credential"
+	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential/kyc"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/httpapi"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/issuer"
@@ -53,8 +55,8 @@ func newEnv(t *testing.T, withIssuance bool) *testEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	policies := []verification.Policy{
-		{CredentialType: kyc.Type, Require: []verification.Requirement{{Claim: kyc.ClaimVerified, Equals: true}}},
+	policies := []domainverification.Policy{
+		{CredentialType: kyc.Type, Require: []domainverification.Requirement{{Claim: kyc.ClaimVerified, Equals: true}}},
 		{CredentialType: membershipType, Require: []verification.Requirement{{Claim: "tier", Equals: "gold"}}, Disclose: []string{"tier"}},
 	}
 	v := credential.NewVerifier(schemas, clock)
@@ -62,7 +64,7 @@ func newEnv(t *testing.T, withIssuance bool) *testEnv {
 	api := httpapi.API{CredentialVerification: verification.NewService(v, policies)}
 	if withIssuance {
 		approvals := approval.NewService(schemas)
-		svc, err := credential.NewService(iss.Signer, approvals, schemas, time.Hour, clock)
+		svc, err := issuance.NewService(iss.Signer, approvals, schemas, time.Hour, clock)
 		if err != nil {
 			t.Fatal(err)
 		}
