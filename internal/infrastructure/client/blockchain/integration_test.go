@@ -24,6 +24,7 @@ import (
 	"github.com/gagliardetto/solana-go"
 	"github.com/gagliardetto/solana-go/rpc"
 
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/registry"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/infrastructure/client/blockchain"
 )
 
@@ -135,7 +136,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		// Other test packages share this validator and may have initialized the
 		// registry already, so don't assume whether this call creates it.
 		res, err := e.client.InitializeRegistry(ctx)
-		if err != nil || (res.Changed && res.Signature.IsZero()) {
+		if err != nil || (res.Changed && res.Reference == "") {
 			t.Fatalf("init: res=%+v err=%v", res, err)
 		}
 		cfg, err := e.client.GetRegistry(ctx)
@@ -150,11 +151,11 @@ func TestRegistryLifecycle(t *testing.T) {
 		}
 	})
 
-	issuerID := blockchain.IssuerID("did:example:integration-issuer")
+	issuerID := registry.IssuerID("did:example:integration-issuer")
 	signingKey := newIssuerKey(t)
 
 	t.Run("issuer registration and lookup", func(t *testing.T) {
-		if _, err := e.client.GetIssuer(ctx, issuerID); !errors.Is(err, blockchain.ErrNotFound) {
+		if _, err := e.client.GetIssuer(ctx, issuerID); !errors.Is(err, registry.ErrNotFound) {
 			t.Fatalf("before register: err = %v, want ErrNotFound", err)
 		}
 		res, err := e.client.RegisterIssuer(ctx, issuerID, signingKey, e.issuer.PublicKey())
@@ -172,7 +173,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		if res, err := e.client.RegisterIssuer(ctx, issuerID, signingKey, e.issuer.PublicKey()); err != nil || res.Changed {
 			t.Fatalf("identical repeat: res=%+v err=%v, want no-op", res, err)
 		}
-		if _, err := e.client.RegisterIssuer(ctx, issuerID, newIssuerKey(t), e.issuer.PublicKey()); !errors.Is(err, blockchain.ErrConflict) {
+		if _, err := e.client.RegisterIssuer(ctx, issuerID, newIssuerKey(t), e.issuer.PublicKey()); !errors.Is(err, registry.ErrConflict) {
 			t.Fatalf("different key: err = %v, want ErrConflict", err)
 		}
 	})
@@ -181,7 +182,7 @@ func TestRegistryLifecycle(t *testing.T) {
 	exp := time.Now().Add(time.Hour).Truncate(time.Second)
 
 	t.Run("credential registration and lookup", func(t *testing.T) {
-		if _, err := e.client.GetCredentialStatus(ctx, ref); !errors.Is(err, blockchain.ErrNotFound) {
+		if _, err := e.client.GetCredentialStatus(ctx, ref); !errors.Is(err, registry.ErrNotFound) {
 			t.Fatalf("before register: err = %v, want ErrNotFound", err)
 		}
 		res, err := e.client.RegisterCredential(ctx, issuerID, ref, exp)
@@ -192,13 +193,13 @@ func TestRegistryLifecycle(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if st.State != blockchain.CredentialActive || st.IssuerID != issuerID || !st.ExpiresAt.Equal(exp) {
+		if st.State != registry.CredentialActive || st.IssuerID != issuerID || !st.ExpiresAt.Equal(exp) {
 			t.Fatalf("status = %+v", st)
 		}
 		if res, err := e.client.RegisterCredential(ctx, issuerID, ref, exp); err != nil || res.Changed {
 			t.Fatalf("identical repeat: res=%+v err=%v, want no-op", res, err)
 		}
-		if _, err := e.client.RegisterCredential(ctx, issuerID, ref, exp.Add(time.Hour)); !errors.Is(err, blockchain.ErrConflict) {
+		if _, err := e.client.RegisterCredential(ctx, issuerID, ref, exp.Add(time.Hour)); !errors.Is(err, registry.ErrConflict) {
 			t.Fatalf("different expiry: err = %v, want ErrConflict", err)
 		}
 	})
@@ -207,7 +208,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		ref := randomRef(t)
 		const n = 5
 		var wg sync.WaitGroup
-		results := make([]blockchain.WriteResult, n)
+		results := make([]registry.WriteResult, n)
 		errs := make([]error, n)
 		for i := 0; i < n; i++ {
 			wg.Add(1)
@@ -222,7 +223,7 @@ func TestRegistryLifecycle(t *testing.T) {
 				t.Fatalf("request %d: %v", i, err)
 			}
 		}
-		if st, err := e.client.GetCredentialStatus(ctx, ref); err != nil || st.State != blockchain.CredentialActive {
+		if st, err := e.client.GetCredentialStatus(ctx, ref); err != nil || st.State != registry.CredentialActive {
 			t.Fatalf("status = %+v err=%v", st, err)
 		}
 	})
@@ -248,14 +249,14 @@ func TestRegistryLifecycle(t *testing.T) {
 	})
 
 	t.Run("revocation", func(t *testing.T) {
-		if _, err := e.client.RevokeCredential(ctx, issuerID, randomRef(t)); !errors.Is(err, blockchain.ErrNotFound) {
+		if _, err := e.client.RevokeCredential(ctx, issuerID, randomRef(t)); !errors.Is(err, registry.ErrNotFound) {
 			t.Fatalf("unknown credential: err = %v, want ErrNotFound", err)
 		}
 		res, err := e.client.RevokeCredential(ctx, issuerID, ref)
 		if err != nil || !res.Changed {
 			t.Fatalf("revoke: res=%+v err=%v", res, err)
 		}
-		if st, _ := e.client.GetCredentialStatus(ctx, ref); st.State != blockchain.CredentialRevoked {
+		if st, _ := e.client.GetCredentialStatus(ctx, ref); st.State != registry.CredentialRevoked {
 			t.Fatalf("status = %+v, want revoked", st)
 		}
 		if res, err := e.client.RevokeCredential(ctx, issuerID, ref); err != nil || res.Changed {
@@ -274,11 +275,11 @@ func TestRegistryLifecycle(t *testing.T) {
 			RegistryAuthorityKeypair: writeKeypair(t, rogue),
 		})
 
-		_, err := c.RegisterIssuer(ctx, blockchain.IssuerID("did:example:rogue"), newIssuerKey(t), rogue.PublicKey())
+		_, err := c.RegisterIssuer(ctx, registry.IssuerID("did:example:rogue"), newIssuerKey(t), rogue.PublicKey())
 		if !errors.Is(err, blockchain.ErrTxRejected) {
 			t.Fatalf("err = %v, want ErrTxRejected", err)
 		}
-		if _, err := e.client.GetIssuer(ctx, blockchain.IssuerID("did:example:rogue")); !errors.Is(err, blockchain.ErrNotFound) {
+		if _, err := e.client.GetIssuer(ctx, registry.IssuerID("did:example:rogue")); !errors.Is(err, registry.ErrNotFound) {
 			t.Fatalf("rogue issuer must not exist, got err = %v", err)
 		}
 	})

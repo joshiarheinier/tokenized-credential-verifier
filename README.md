@@ -175,6 +175,7 @@ internal/
     credential/              Credential model, schemas, Ed25519 signer and verifier
     credential/kyc/          The KYCStatus credential type (first registered type)
     issuer/                  Issuer identity and signing-key loading
+    registry/                The trust registry's model: issuer records, credential status, ids, shared errors
     verification/            Relying-application policy: accepted types and issuers, required and disclosed claims
   application/               Use cases; orchestrate the domain
     approval/                Issuer approval decisions: recorded once, consumed once at issuance (in memory)
@@ -183,7 +184,7 @@ internal/
   gateways/
     http/                    HTTP gateway: routes, middleware (request logging, panic recovery), handlers
   infrastructure/            Technical adapters
-    client/blockchain/       Client for the Solana registry program (the only package importing the Solana SDK)
+    client/blockchain/       Solana implementation of the registry (the only package importing the Solana SDK)
     logging/                 slog logger construction
   config/                    Environment-variable configuration with validation
   testutil/                  Helpers for integration tests (build tag `integration`)
@@ -193,11 +194,11 @@ docs/                        Design and reference documents
 ```
 
 Dependencies point inward: `gateways` call `application`, which uses `domain`;
-`domain` imports nothing else from the project. `cmd/api` is the only place
-that knows every layer, and it is where dependencies are constructed and
-injected. One deliberate exception today: the application services import
-plain types and id helpers (`IssuerRecord`, `WriteResult`, `IssuerID`, ...) from
-`infrastructure/client/blockchain` rather than from `domain`.
+`domain` imports nothing else from the project, and `infrastructure` implements
+what the domain describes. The application services import no infrastructure:
+they define small interfaces (`BlockchainClient`) in domain terms, and the
+Solana client satisfies them. `cmd/api` is the only place that knows every
+layer, and it is where dependencies are constructed and injected.
 
 The HTTP gateway package is named `http`, like its directory. Code that also
 imports `net/http` aliases it (`httpgateway` in `cmd/api`).

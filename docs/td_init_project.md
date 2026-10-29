@@ -371,6 +371,7 @@ tokenized-credential-verifier/
 │   │   ├── credential/            model, schemas, signer, verifier
 │   │   │   └── kyc/               the first credential type
 │   │   ├── issuer/
+│   │   ├── registry/              trust-registry model: issuer records, credential status, ids
 │   │   └── verification/          relying-application policy
 │   ├── application/               use cases
 │   │   ├── approval/
@@ -380,7 +381,7 @@ tokenized-credential-verifier/
 │   │   └── http/                  routes, middleware, handlers
 │   ├── infrastructure/
 │   │   ├── client/
-│   │   │   └── blockchain/        Solana registry client
+│   │   │   └── blockchain/        Solana implementation of the registry
 │   │   ├── logging/
 │   │   └── repository/            (planned) PostgreSQL implementations
 │   ├── config/
@@ -403,7 +404,7 @@ tokenized-credential-verifier/
 └── README.md
 ```
 
-Dependencies point inward: gateways call application services, which use the domain; the domain imports nothing else from the project. `cmd/api` constructs the concrete implementations and injects them. Packages marked planned are added when their responsibilities become real.
+Dependencies point inward: gateways call application services, which use the domain; the domain imports nothing else from the project, and infrastructure implements what the domain describes. Application services define small interfaces in domain terms and import no infrastructure. `cmd/api` constructs the concrete implementations and injects them. Packages marked planned are added when their responsibilities become real.
 
 ### 6.2 Dependency Direction
 

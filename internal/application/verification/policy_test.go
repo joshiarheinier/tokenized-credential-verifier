@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/registry"
 	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/infrastructure/client/blockchain"
 )
 
 func TestVerifyAppliesPolicyPerType(t *testing.T) {
@@ -68,7 +68,7 @@ func TestIssuerAllowListIsPerType(t *testing.T) {
 // the chain being consulted, so it cannot be mistaken for an outage.
 func TestIssuerAllowListIsCheckedBeforeTheChain(t *testing.T) {
 	f := newFixture(t)
-	f.reg.issuerErr = blockchain.ErrUnavailable
+	f.reg.issuerErr = registry.ErrUnavailable
 	svc := NewService(credentialVerifier(t, f), []domainverification.Policy{{
 		CredentialType:  testType,
 		AcceptedIssuers: []string{"did:example:someone-else"},

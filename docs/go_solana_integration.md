@@ -6,17 +6,18 @@ How the Go backend uses the registry program. Program details are in `solana_reg
 
 | Package | Role |
 |---|---|
-| `internal/infrastructure/client/blockchain` | Client for the registry program. It imports nothing else from the project, and is the only package that imports the Solana SDK. Reads accounts, builds and confirms transactions, maps ids. Built with `blockchain.NewClient(blockchain.Config{...})`. |
-| `internal/application/verification` | Applies the on-chain checks, depending only on a small `BlockchainClient` interface (the read side of the client). |
-| `internal/application/credential` | Issues credentials; calls an optional `BlockchainClient` (the register side of the client) before returning one. |
-| `internal/domain/...` | Credential model, signing and verification, and policy. No blockchain dependency: signing and verification never touch the chain. |
+| `internal/domain/registry` | The registry in domain terms: `IssuerRecord`, `CredentialStatus`, `WriteResult`, the shared errors (`ErrNotFound`, `ErrUnavailable`, `ErrConflict`) and the id functions `IssuerID` and `CredentialRef`. No Solana types. |
+| `internal/infrastructure/client/blockchain` | The Solana implementation of the registry. It depends only on `domain/registry`, and is the only package that imports the Solana SDK. Reads accounts, builds and confirms transactions, returns the domain's types. Built with `blockchain.NewClient(blockchain.Config{...})`. |
+| `internal/application/verification` | Applies the on-chain checks, depending only on a small `BlockchainClient` interface (the read side of the registry), written in domain types. |
+| `internal/application/credential` | Issues credentials; calls an optional `BlockchainClient` (the register side) before returning one. |
+| `internal/domain/credential`, `verification` | Credential model, signing, verification and policy. No blockchain dependency: signing and verification never touch the chain. |
 | `cmd/api` | Composition root: builds the client from configuration, injects it into the services, and runs the optional dev-only registry bootstrap. |
 
 SDK: `github.com/gagliardetto/solana-go` v1.25.0. The TD names `github.com/solana-foundation/solana-go`, but the repository moved orgs without changing its module path, so Go only accepts the old path. It is the same code.
 
 ## Identifier mapping
 
-The credential layer and the program use different identifiers. `internal/infrastructure/client/blockchain/helper.go` maps between them with domain-separated SHA-256:
+The credential layer and the program use different identifiers. `internal/domain/registry/ids.go` maps between them with domain-separated SHA-256 (a golden test pins the derivation, since changing it would orphan every existing record):
 
 | Credential claim | On-chain id |
 |---|---|
@@ -27,7 +28,7 @@ The credential layer and the program use different identifiers. `internal/infras
 
 ## Reading
 
-`GetRegistry`, `GetIssuer` and `GetCredentialStatus` read at the configured commitment (`confirmed` by default) and treat the response as untrusted: the account must be owned by the program, have the right discriminator and exact size, valid field values, and the id it claims. A missing account is `ErrNotFound`; anything else that prevents an answer is `ErrUnavailable` or `ErrInvalidAccount`. These are never conflated.
+`GetRegistry`, `GetIssuer` and `GetCredentialStatus` read at the configured commitment (`confirmed` by default) and treat the response as untrusted: the account must be owned by the program, have the right discriminator and exact size, valid field values, and the id it claims. A missing account is `registry.ErrNotFound`; anything else that prevents an answer is `registry.ErrUnavailable` or the adapter's `ErrInvalidAccount`. These are never conflated.
 
 Transient RPC errors are retried with exponential backoff (default 3 attempts, 200 ms base, 10 s per call).
 
@@ -35,7 +36,7 @@ Transient RPC errors are retried with exponential backoff (default 3 attempts, 2
 
 Every write is idempotent and confirmed before it reports success:
 
-1. Read current state. If it already matches the request, return a no-op (`Changed: false`). If a different record exists, return `ErrConflict` without sending anything.
+1. Read current state. If it already matches the request, return a no-op (`Changed: false`). If a different record exists, return `registry.ErrConflict` without sending anything.
 2. Sign and send (transient send failures are retried with the same signed transaction; resending it cannot land twice).
 3. Poll signature status until it reaches the configured commitment. Success is reported only then.
 4. If the transaction is rejected, re-read state: a concurrent request that created the identical record counts as success.

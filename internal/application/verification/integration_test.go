@@ -15,6 +15,7 @@ import (
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/verification"
 	domaincredential "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential/kyc"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/registry"
 	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/infrastructure/client/blockchain"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/testutil"
@@ -60,7 +61,7 @@ func TestVerificationAgainstRealChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	issuerID := blockchain.IssuerID(issuerName)
+	issuerID := registry.IssuerID(issuerName)
 	if _, err := client.RegisterIssuer(ctx, issuerID, pub, issuerAuthority); err != nil {
 		t.Fatal(err)
 	}
@@ -83,7 +84,7 @@ func TestVerificationAgainstRealChain(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return issued.Token, blockchain.CredentialRef(c.ID)
+		return issued.Token, registry.CredentialRef(c.ID)
 	}
 	expect := func(token string, valid bool, reason verification.Reason) {
 		t.Helper()

@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/gagliardetto/solana-go"
+
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/registry"
 )
 
 // Wire format of the registry program (docs/solana_registry.md). Anchor
@@ -86,15 +88,15 @@ func decodeRegistryConfig(program solana.PublicKey, owner solana.PublicKey, data
 	}, nil
 }
 
-func decodeIssuerRecord(program solana.PublicKey, owner solana.PublicKey, data []byte) (IssuerRecord, error) {
+func decodeIssuerRecord(program solana.PublicKey, owner solana.PublicKey, data []byte) (registry.IssuerRecord, error) {
 	if err := checkAccount(program, owner, data, acctIssuerRecord, issuerRecordSize); err != nil {
-		return IssuerRecord{}, fmt.Errorf("issuer record: %w", err)
+		return registry.IssuerRecord{}, fmt.Errorf("issuer record: %w", err)
 	}
 	active, err := decodeBool(data[104])
 	if err != nil {
-		return IssuerRecord{}, fmt.Errorf("issuer record: active: %w", err)
+		return registry.IssuerRecord{}, fmt.Errorf("issuer record: active: %w", err)
 	}
-	var rec IssuerRecord
+	var rec registry.IssuerRecord
 	copy(rec.IssuerID[:], data[8:40])
 	rec.SigningKey = append(ed25519.PublicKey(nil), data[40:72]...)
 	rec.Authority = solana.PublicKeyFromBytes(data[72:104])
@@ -103,15 +105,15 @@ func decodeIssuerRecord(program solana.PublicKey, owner solana.PublicKey, data [
 	return rec, nil
 }
 
-func decodeCredentialStatus(program solana.PublicKey, owner solana.PublicKey, data []byte) (CredentialStatus, error) {
+func decodeCredentialStatus(program solana.PublicKey, owner solana.PublicKey, data []byte) (registry.CredentialStatus, error) {
 	if err := checkAccount(program, owner, data, acctCredentialState, credentialStatusSize); err != nil {
-		return CredentialStatus{}, fmt.Errorf("credential status: %w", err)
+		return registry.CredentialStatus{}, fmt.Errorf("credential status: %w", err)
 	}
-	state := CredentialState(data[72])
-	if state != CredentialActive && state != CredentialRevoked {
-		return CredentialStatus{}, fmt.Errorf("credential status: %w: unknown status %d", ErrInvalidAccount, state)
+	state := registry.CredentialState(data[72])
+	if state != registry.CredentialActive && state != registry.CredentialRevoked {
+		return registry.CredentialStatus{}, fmt.Errorf("credential status: %w: unknown status %d", ErrInvalidAccount, state)
 	}
-	var st CredentialStatus
+	var st registry.CredentialStatus
 	copy(st.Ref[:], data[8:40])
 	copy(st.IssuerID[:], data[40:72])
 	st.State = state
@@ -170,7 +172,7 @@ func (a addresses) initializeRegistryIx(authority solana.PublicKey) (solana.Inst
 	}, ixInitializeRegistry[:]), nil
 }
 
-func (a addresses) registerIssuerIx(authority solana.PublicKey, rec IssuerRecord) (solana.Instruction, error) {
+func (a addresses) registerIssuerIx(authority solana.PublicKey, rec registry.IssuerRecord) (solana.Instruction, error) {
 	cfg, err := a.registryConfig()
 	if err != nil {
 		return nil, err

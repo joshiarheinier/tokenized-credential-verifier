@@ -11,6 +11,8 @@ import (
 	"github.com/gagliardetto/solana-go"
 	"github.com/gagliardetto/solana-go/rpc"
 	"github.com/gagliardetto/solana-go/rpc/jsonrpc"
+
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/registry"
 )
 
 // rpcAPI is the subset of the SDK's RPC client the adapter uses, so tests can
@@ -149,7 +151,7 @@ func sleepCtx(ctx context.Context, d time.Duration) error {
 
 // --- Reads -----------------------------------------------------------------
 
-// GetRegistry returns the registry configuration, or ErrNotFound if the
+// GetRegistry returns the registry configuration, or registry.ErrNotFound if the
 // registry has not been initialized.
 func (c *Client) GetRegistry(ctx context.Context) (RegistryConfig, error) {
 	addr, err := c.addrs.registryConfig()
@@ -163,43 +165,43 @@ func (c *Client) GetRegistry(ctx context.Context) (RegistryConfig, error) {
 	return decodeRegistryConfig(c.opts.ProgramID, acct.Owner, acct.Data.GetBinary())
 }
 
-// GetIssuer returns the issuer record, or ErrNotFound if it is not registered.
-func (c *Client) GetIssuer(ctx context.Context, id [32]byte) (IssuerRecord, error) {
+// GetIssuer returns the issuer record, or registry.ErrNotFound if it is not registered.
+func (c *Client) GetIssuer(ctx context.Context, id [32]byte) (registry.IssuerRecord, error) {
 	addr, err := c.addrs.issuer(id)
 	if err != nil {
-		return IssuerRecord{}, err
+		return registry.IssuerRecord{}, err
 	}
 	acct, err := c.readAccount(ctx, addr)
 	if err != nil {
-		return IssuerRecord{}, err
+		return registry.IssuerRecord{}, err
 	}
 	rec, err := decodeIssuerRecord(c.opts.ProgramID, acct.Owner, acct.Data.GetBinary())
 	if err != nil {
-		return IssuerRecord{}, err
+		return registry.IssuerRecord{}, err
 	}
 	if rec.IssuerID != id {
-		return IssuerRecord{}, fmt.Errorf("issuer record: %w: id mismatch", ErrInvalidAccount)
+		return registry.IssuerRecord{}, fmt.Errorf("issuer record: %w: id mismatch", ErrInvalidAccount)
 	}
 	return rec, nil
 }
 
 // GetCredentialStatus returns the on-chain status of a credential reference,
-// or ErrNotFound if it was never registered.
-func (c *Client) GetCredentialStatus(ctx context.Context, ref [32]byte) (CredentialStatus, error) {
+// or registry.ErrNotFound if it was never registered.
+func (c *Client) GetCredentialStatus(ctx context.Context, ref [32]byte) (registry.CredentialStatus, error) {
 	addr, err := c.addrs.credential(ref)
 	if err != nil {
-		return CredentialStatus{}, err
+		return registry.CredentialStatus{}, err
 	}
 	acct, err := c.readAccount(ctx, addr)
 	if err != nil {
-		return CredentialStatus{}, err
+		return registry.CredentialStatus{}, err
 	}
 	st, err := decodeCredentialStatus(c.opts.ProgramID, acct.Owner, acct.Data.GetBinary())
 	if err != nil {
-		return CredentialStatus{}, err
+		return registry.CredentialStatus{}, err
 	}
 	if st.Ref != ref {
-		return CredentialStatus{}, fmt.Errorf("credential status: %w: ref mismatch", ErrInvalidAccount)
+		return registry.CredentialStatus{}, fmt.Errorf("credential status: %w: ref mismatch", ErrInvalidAccount)
 	}
 	return st, nil
 }
@@ -226,10 +228,10 @@ func (c *Client) readAccount(ctx context.Context, addr solana.PublicKey) (accoun
 		return nil
 	})
 	if errors.Is(err, rpc.ErrNotFound) {
-		return account{}, ErrNotFound
+		return account{}, registry.ErrNotFound
 	}
 	if err != nil {
-		return account{}, fmt.Errorf("%w: %v", ErrUnavailable, err)
+		return account{}, fmt.Errorf("%w: %v", registry.ErrUnavailable, err)
 	}
 	return out, nil
 }
@@ -240,10 +242,10 @@ func (c *Client) readAccount(ctx context.Context, addr solana.PublicKey) (accoun
 // authority as administrator. The authority key must also be the program's
 // upgrade authority. It is a no-op if the registry already exists with this
 // authority.
-func (c *Client) InitializeRegistry(ctx context.Context) (WriteResult, error) {
+func (c *Client) InitializeRegistry(ctx context.Context) (registry.WriteResult, error) {
 	signer, err := c.registrySigner()
 	if err != nil {
-		return WriteResult{}, err
+		return registry.WriteResult{}, err
 	}
 	matches := func() (bool, error) {
 		cfg, err := c.GetRegistry(ctx)
@@ -251,48 +253,48 @@ func (c *Client) InitializeRegistry(ctx context.Context) (WriteResult, error) {
 			return false, err
 		}
 		if cfg.Authority != signer.PublicKey() {
-			return false, fmt.Errorf("%w: registry already initialized with a different authority", ErrConflict)
+			return false, fmt.Errorf("%w: registry already initialized with a different authority", registry.ErrConflict)
 		}
 		return true, nil
 	}
 	ix, err := c.addrs.initializeRegistryIx(signer.PublicKey())
 	if err != nil {
-		return WriteResult{}, err
+		return registry.WriteResult{}, err
 	}
 	return c.ensure(ctx, signer, matches, ix)
 }
 
 // RegisterIssuer registers a trusted issuer. It is a no-op if an identical
-// record exists, and returns ErrConflict if a different one does.
-func (c *Client) RegisterIssuer(ctx context.Context, id [32]byte, signingKey []byte, authority solana.PublicKey) (WriteResult, error) {
+// record exists, and returns registry.ErrConflict if a different one does.
+func (c *Client) RegisterIssuer(ctx context.Context, id [32]byte, signingKey []byte, authority solana.PublicKey) (registry.WriteResult, error) {
 	signer, err := c.registrySigner()
 	if err != nil {
-		return WriteResult{}, err
+		return registry.WriteResult{}, err
 	}
-	want := IssuerRecord{IssuerID: id, SigningKey: signingKey, Authority: authority}
+	want := registry.IssuerRecord{IssuerID: id, SigningKey: signingKey, Authority: authority}
 	matches := func() (bool, error) {
 		got, err := c.GetIssuer(ctx, id)
 		if err != nil {
 			return false, err
 		}
 		if !bytes.Equal(got.SigningKey, want.SigningKey) || got.Authority != want.Authority {
-			return false, fmt.Errorf("%w: issuer already registered with different keys", ErrConflict)
+			return false, fmt.Errorf("%w: issuer already registered with different keys", registry.ErrConflict)
 		}
 		return true, nil
 	}
 	ix, err := c.addrs.registerIssuerIx(signer.PublicKey(), want)
 	if err != nil {
-		return WriteResult{}, err
+		return registry.WriteResult{}, err
 	}
 	return c.ensure(ctx, signer, matches, ix)
 }
 
 // SetIssuerStatus activates or suspends an issuer. It is a no-op if the issuer
-// already has the requested status, and returns ErrNotFound if it is unknown.
-func (c *Client) SetIssuerStatus(ctx context.Context, id [32]byte, active bool) (WriteResult, error) {
+// already has the requested status, and returns registry.ErrNotFound if it is unknown.
+func (c *Client) SetIssuerStatus(ctx context.Context, id [32]byte, active bool) (registry.WriteResult, error) {
 	signer, err := c.registrySigner()
 	if err != nil {
-		return WriteResult{}, err
+		return registry.WriteResult{}, err
 	}
 	matches := func() (bool, error) {
 		got, err := c.GetIssuer(ctx, id)
@@ -303,17 +305,17 @@ func (c *Client) SetIssuerStatus(ctx context.Context, id [32]byte, active bool) 
 	}
 	ix, err := c.addrs.setIssuerStatusIx(signer.PublicKey(), id, active)
 	if err != nil {
-		return WriteResult{}, err
+		return registry.WriteResult{}, err
 	}
 	return c.ensureExisting(ctx, signer, matches, ix)
 }
 
 // RegisterCredential records a credential reference as active. It is a no-op
-// if an identical record exists, and returns ErrConflict if a different one does.
-func (c *Client) RegisterCredential(ctx context.Context, issuerID, ref [32]byte, expiresAt time.Time) (WriteResult, error) {
+// if an identical record exists, and returns registry.ErrConflict if a different one does.
+func (c *Client) RegisterCredential(ctx context.Context, issuerID, ref [32]byte, expiresAt time.Time) (registry.WriteResult, error) {
 	signer, err := c.issuerSigner()
 	if err != nil {
-		return WriteResult{}, err
+		return registry.WriteResult{}, err
 	}
 	matches := func() (bool, error) {
 		got, err := c.GetCredentialStatus(ctx, ref)
@@ -321,34 +323,34 @@ func (c *Client) RegisterCredential(ctx context.Context, issuerID, ref [32]byte,
 			return false, err
 		}
 		if got.IssuerID != issuerID || !got.ExpiresAt.Equal(expiresAt.Truncate(time.Second)) {
-			return false, fmt.Errorf("%w: credential reference already registered with different data", ErrConflict)
+			return false, fmt.Errorf("%w: credential reference already registered with different data", registry.ErrConflict)
 		}
 		return true, nil
 	}
 	ix, err := c.addrs.registerCredentialIx(signer.PublicKey(), issuerID, ref, expiresAt)
 	if err != nil {
-		return WriteResult{}, err
+		return registry.WriteResult{}, err
 	}
 	return c.ensure(ctx, signer, matches, ix)
 }
 
 // RevokeCredential revokes a registered credential. It is a no-op if it is
-// already revoked, and returns ErrNotFound if it was never registered.
-func (c *Client) RevokeCredential(ctx context.Context, issuerID, ref [32]byte) (WriteResult, error) {
+// already revoked, and returns registry.ErrNotFound if it was never registered.
+func (c *Client) RevokeCredential(ctx context.Context, issuerID, ref [32]byte) (registry.WriteResult, error) {
 	signer, err := c.issuerSigner()
 	if err != nil {
-		return WriteResult{}, err
+		return registry.WriteResult{}, err
 	}
 	matches := func() (bool, error) {
 		got, err := c.GetCredentialStatus(ctx, ref)
 		if err != nil {
 			return false, err
 		}
-		return got.State == CredentialRevoked, nil
+		return got.State == registry.CredentialRevoked, nil
 	}
 	ix, err := c.addrs.revokeCredentialIx(signer.PublicKey(), issuerID, ref)
 	if err != nil {
-		return WriteResult{}, err
+		return registry.WriteResult{}, err
 	}
 	return c.ensureExisting(ctx, signer, matches, ix)
 }
@@ -378,14 +380,14 @@ func (c *Client) issuerSigner() (solana.PrivateKey, error) {
 
 // ensure makes a create-style change idempotent. matches reports whether the
 // chain already holds the desired state: (true, nil) means nothing to do,
-// ErrNotFound means it must be created, and any other error aborts.
-func (c *Client) ensure(ctx context.Context, signer solana.PrivateKey, matches func() (bool, error), ix solana.Instruction) (WriteResult, error) {
+// registry.ErrNotFound means it must be created, and any other error aborts.
+func (c *Client) ensure(ctx context.Context, signer solana.PrivateKey, matches func() (bool, error), ix solana.Instruction) (registry.WriteResult, error) {
 	ok, err := matches()
 	switch {
 	case err == nil && ok:
-		return WriteResult{}, nil
-	case err != nil && !errors.Is(err, ErrNotFound):
-		return WriteResult{}, err
+		return registry.WriteResult{}, nil
+	case err != nil && !errors.Is(err, registry.ErrNotFound):
+		return registry.WriteResult{}, err
 	}
 
 	sig, err := c.submit(ctx, signer, ix)
@@ -394,42 +396,44 @@ func (c *Client) ensure(ctx context.Context, signer solana.PrivateKey, matches f
 		// read and our transaction. If the chain now matches, that is success.
 		if errors.Is(err, ErrTxRejected) {
 			if ok, mErr := matches(); mErr == nil && ok {
-				return WriteResult{}, nil
+				return registry.WriteResult{}, nil
 			}
 		}
-		return WriteResult{Signature: sigOf(err)}, err
+		return registry.WriteResult{Reference: refOf(err)}, err
 	}
-	return WriteResult{Signature: sig, Changed: true}, nil
+	return registry.WriteResult{Reference: sig.String(), Changed: true}, nil
 }
 
 // ensureExisting is ensure for state changes on a record that must already
-// exist: ErrNotFound is returned to the caller rather than triggering a send.
-func (c *Client) ensureExisting(ctx context.Context, signer solana.PrivateKey, matches func() (bool, error), ix solana.Instruction) (WriteResult, error) {
+// exist: registry.ErrNotFound is returned to the caller rather than triggering a send.
+func (c *Client) ensureExisting(ctx context.Context, signer solana.PrivateKey, matches func() (bool, error), ix solana.Instruction) (registry.WriteResult, error) {
 	ok, err := matches()
 	if err != nil {
-		return WriteResult{}, err
+		return registry.WriteResult{}, err
 	}
 	if ok {
-		return WriteResult{}, nil
+		return registry.WriteResult{}, nil
 	}
 	sig, err := c.submit(ctx, signer, ix)
 	if err != nil {
 		if errors.Is(err, ErrTxRejected) {
 			if ok, mErr := matches(); mErr == nil && ok {
-				return WriteResult{}, nil
+				return registry.WriteResult{}, nil
 			}
 		}
-		return WriteResult{Signature: sigOf(err)}, err
+		return registry.WriteResult{Reference: refOf(err)}, err
 	}
-	return WriteResult{Signature: sig, Changed: true}, nil
+	return registry.WriteResult{Reference: sig.String(), Changed: true}, nil
 }
 
-func sigOf(err error) solana.Signature {
+// refOf returns the transaction signature carried by a failed write's error, as
+// the Reference of a registry.WriteResult, or "" if there is none.
+func refOf(err error) string {
 	var txErr *TxError
-	if errors.As(err, &txErr) {
-		return txErr.Signature
+	if errors.As(err, &txErr) && !txErr.Signature.IsZero() {
+		return txErr.Signature.String()
 	}
-	return solana.Signature{}
+	return ""
 }
 
 // submit signs, sends and confirms a single-instruction transaction. It
@@ -449,7 +453,7 @@ func (c *Client) submit(ctx context.Context, signer solana.PrivateKey, ix solana
 		return nil
 	})
 	if err != nil {
-		return solana.Signature{}, fmt.Errorf("%w: latest blockhash: %v", ErrUnavailable, err)
+		return solana.Signature{}, fmt.Errorf("%w: latest blockhash: %v", registry.ErrUnavailable, err)
 	}
 
 	tx, err := solana.NewTransaction([]solana.Instruction{ix}, bh.Blockhash, solana.TransactionPayer(signer.PublicKey()))
@@ -502,7 +506,7 @@ func (c *Client) send(ctx context.Context, tx *solana.Transaction) (solana.Signa
 		if errors.As(err, &txErr) {
 			return txErr.Signature, txErr
 		}
-		return tx.Signatures[0], fmt.Errorf("%w: send: %v", ErrUnavailable, err)
+		return tx.Signatures[0], fmt.Errorf("%w: send: %v", registry.ErrUnavailable, err)
 	}
 	return sig, nil
 }

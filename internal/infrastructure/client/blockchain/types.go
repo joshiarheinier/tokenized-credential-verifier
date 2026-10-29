@@ -1,7 +1,9 @@
-// Package blockchain is the adapter between the application and the Solana
-// registry program in contracts/credential-registry. It is the only package that
-// imports the Solana SDK. The application layer depends on the plain types and
-// id helpers declared here, and defines its own small interfaces over Client.
+// Package blockchain implements the trust registry (internal/domain/registry)
+// on top of the Solana registry program in contracts/credential-registry. It is
+// the only package that imports the Solana SDK. Client returns the domain's
+// registry types and reports the domain's errors (registry.ErrNotFound,
+// registry.ErrUnavailable, registry.ErrConflict), so the application layer can
+// depend on the domain alone and define its own small interfaces over Client.
 //
 // All data read from an RPC node is treated as untrusted: accounts are checked
 // for the expected owner, discriminator and exact size before use, and any
@@ -9,27 +11,19 @@
 package blockchain
 
 import (
-	"crypto/ed25519"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/gagliardetto/solana-go"
 )
 
-// Errors returned by the adapter. Use errors.Is to classify them.
+// Errors specific to this adapter. Use errors.Is to classify them. Errors every
+// registry implementation shares are defined by the domain (registry.ErrNotFound
+// and friends).
 var (
-	// ErrNotFound means the account does not exist on chain.
-	ErrNotFound = errors.New("blockchain: account not found")
-	// ErrUnavailable means the chain could not be reached or answered
-	// unusably. It says nothing about the state of the requested record.
-	ErrUnavailable = errors.New("blockchain: chain unavailable")
 	// ErrInvalidAccount means an account exists but is not a valid record of
 	// this program (wrong owner, discriminator, size or field values).
 	ErrInvalidAccount = errors.New("blockchain: invalid account")
-	// ErrConflict means a record already exists with different contents than
-	// the one requested.
-	ErrConflict = errors.New("blockchain: conflicting record exists")
 	// ErrSignerMissing means no key is configured for the required role.
 	ErrSignerMissing = errors.New("blockchain: signer not configured")
 	// ErrTxRejected means the transaction was rejected or failed on chain. It
@@ -57,45 +51,10 @@ func (e *TxError) Error() string {
 
 func (e *TxError) Is(target error) bool { return target == e.Kind }
 
-// RegistryConfig mirrors the on-chain RegistryConfig account.
+// RegistryConfig mirrors the on-chain RegistryConfig account. It is specific to
+// the Solana program's administration and is not part of the domain model.
 type RegistryConfig struct {
 	Authority solana.PublicKey
 	Paused    bool
 	Version   uint8
-}
-
-// IssuerRecord mirrors the on-chain IssuerRecord account.
-type IssuerRecord struct {
-	IssuerID [32]byte
-	// SigningKey is the Ed25519 key the issuer signs credentials with.
-	SigningKey ed25519.PublicKey
-	// Authority is the Solana key that registers and revokes the issuer's
-	// credentials.
-	Authority solana.PublicKey
-	Active    bool
-	CreatedAt time.Time
-}
-
-// CredentialState is the on-chain status of a credential.
-type CredentialState uint8
-
-const (
-	CredentialActive  CredentialState = 0
-	CredentialRevoked CredentialState = 1
-)
-
-// CredentialStatus mirrors the on-chain CredentialStatus account.
-type CredentialStatus struct {
-	Ref       [32]byte
-	IssuerID  [32]byte
-	State     CredentialState
-	ExpiresAt time.Time
-}
-
-// WriteResult reports the outcome of a registry write. Changed is false when
-// the chain already held the requested state, in which case no transaction was
-// sent and Signature is zero.
-type WriteResult struct {
-	Signature solana.Signature
-	Changed   bool
 }

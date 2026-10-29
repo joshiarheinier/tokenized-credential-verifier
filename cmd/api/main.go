@@ -22,6 +22,7 @@ import (
 	domaincredential "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential/kyc"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/issuer"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/registry"
 	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
 	httpgateway "github.com/joshiarheinier/tokenized-credential-verifier/internal/gateways/http"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/infrastructure/client/blockchain"
@@ -186,7 +187,7 @@ func bootstrapRegistry(chain *blockchain.Client, iss *issuer.Issuer, txTimeout t
 	if err != nil {
 		return fmt.Errorf("bootstrap registry: %w", err)
 	}
-	res, err := chain.RegisterIssuer(ctx, blockchain.IssuerID(iss.ID), iss.Signer.PublicKey(), authority)
+	res, err := chain.RegisterIssuer(ctx, registry.IssuerID(iss.ID), iss.Signer.PublicKey(), authority)
 	if err != nil {
 		return fmt.Errorf("bootstrap registry: register issuer: %w", err)
 	}

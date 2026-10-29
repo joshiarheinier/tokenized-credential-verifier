@@ -9,7 +9,7 @@ import (
 	"time"
 
 	domaincredential "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/infrastructure/client/blockchain"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/registry"
 )
 
 const testType = "TestPass"
@@ -83,13 +83,13 @@ func (f *fakeBlockchainClient) RegisterCredential(
 	_ context.Context,
 	issuerID, ref [32]byte,
 	expiresAt time.Time,
-) (blockchain.WriteResult, error) {
+) (registry.WriteResult, error) {
 	f.calls = append(f.calls, registerCall{
 		issuerID: issuerID,
 		ref:      ref,
 		exp:      expiresAt,
 	})
-	return blockchain.WriteResult{}, f.err
+	return registry.WriteResult{}, f.err
 }
 
 func TestServiceIssueFromApproval(t *testing.T) {
@@ -188,7 +188,7 @@ func TestNewServiceValidation(t *testing.T) {
 
 func TestServiceRegistersCredentialBeforeReturningIt(t *testing.T) {
 	signer := newSigner(t)
-	registry := &fakeBlockchainClient{}
+	chain := &fakeBlockchainClient{}
 	approvals := &fakeApprovals{
 		approval: domaincredential.Approval{
 			Subject:        "user-1",
@@ -202,7 +202,7 @@ func TestServiceRegistersCredentialBeforeReturningIt(t *testing.T) {
 		testSchemas,
 		time.Hour,
 		func() time.Time { return fixedNow },
-		WithBlockchainClient(registry),
+		WithBlockchainClient(chain),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -216,13 +216,13 @@ func TestServiceRegistersCredentialBeforeReturningIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(registry.calls) != 1 {
-		t.Fatalf("blockchain calls = %d, want 1", len(registry.calls))
+	if len(chain.calls) != 1 {
+		t.Fatalf("blockchain calls = %d, want 1", len(chain.calls))
 	}
 
-	got := registry.calls[0]
-	if got.issuerID != blockchain.IssuerID(signer.IssuerID()) ||
-		got.ref != blockchain.CredentialRef(claims.ID) ||
+	got := chain.calls[0]
+	if got.issuerID != registry.IssuerID(signer.IssuerID()) ||
+		got.ref != registry.CredentialRef(claims.ID) ||
 		!got.exp.Equal(time.Unix(claims.ExpiresAt, 0)) {
 		t.Errorf("registered %+v, want IDs and expiry of issued credential", got)
 	}
@@ -256,14 +256,14 @@ func TestServiceReturnsNoCredentialWhenRegistrationFails(t *testing.T) {
 }
 
 func TestServiceDoesNotRegisterForInvalidApprovals(t *testing.T) {
-	registry := &fakeBlockchainClient{}
+	chain := &fakeBlockchainClient{}
 	service, err := NewService(
 		newSigner(t),
 		&fakeApprovals{err: errors.New("not approved")},
 		testSchemas,
 		time.Hour,
 		nil,
-		WithBlockchainClient(registry),
+		WithBlockchainClient(chain),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -272,13 +272,13 @@ func TestServiceDoesNotRegisterForInvalidApprovals(t *testing.T) {
 	if _, err := service.IssueFromApproval(context.Background(), "approval-1"); err == nil {
 		t.Fatal("IssueFromApproval returned no error")
 	}
-	if len(registry.calls) != 0 {
+	if len(chain.calls) != 0 {
 		t.Fatal("invalid approval triggered on-chain registration")
 	}
 }
 
 func TestServiceRejectsApprovalsThatDoNotMatchTheirType(t *testing.T) {
-	registry := &fakeBlockchainClient{}
+	chain := &fakeBlockchainClient{}
 	invalidApprovals := map[string]domaincredential.Approval{
 		"unknown type": {
 			Subject:        "user-1",
@@ -305,7 +305,7 @@ func TestServiceRejectsApprovalsThatDoNotMatchTheirType(t *testing.T) {
 				testSchemas,
 				time.Hour,
 				nil,
-				WithBlockchainClient(registry),
+				WithBlockchainClient(chain),
 			)
 			if err != nil {
 				t.Fatal(err)
@@ -318,7 +318,7 @@ func TestServiceRejectsApprovalsThatDoNotMatchTheirType(t *testing.T) {
 		})
 	}
 
-	if len(registry.calls) != 0 {
+	if len(chain.calls) != 0 {
 		t.Fatal("invalid approvals must not be registered on chain")
 	}
 }

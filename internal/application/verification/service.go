@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/registry"
 	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/infrastructure/client/blockchain"
 )
 
 // Reason is a stable, coarse code explaining why a credential was rejected.
@@ -42,14 +42,15 @@ type Result struct {
 	Claims         map[string]any
 }
 
-// BlockchainClient is the part of the Solana connector's client
-// (internal/infrastructure/client/blockchain.Client) that verification needs: reading the
-// issuer and credential records from the on-chain registry. Errors must wrap
-// blockchain.ErrNotFound only when the record is known to be absent; any
-// failure to establish state must be a different error.
+// BlockchainClient is what verification needs from the on-chain registry:
+// reading the issuer and credential records. It is expressed in domain types
+// (internal/domain/registry); the Solana client in
+// internal/infrastructure/client/blockchain implements it. Errors must wrap
+// registry.ErrNotFound only when the record is known to be absent; any failure
+// to establish state must be a different error, such as registry.ErrUnavailable.
 type BlockchainClient interface {
-	GetIssuer(ctx context.Context, id [32]byte) (blockchain.IssuerRecord, error)
-	GetCredentialStatus(ctx context.Context, ref [32]byte) (blockchain.CredentialStatus, error)
+	GetIssuer(ctx context.Context, id [32]byte) (registry.IssuerRecord, error)
+	GetCredentialStatus(ctx context.Context, ref [32]byte) (registry.CredentialStatus, error)
 }
 
 // Service verifies credentials against per-type policies and, when a
@@ -127,10 +128,10 @@ func (s *Service) Verify(ctx context.Context, token string) Result {
 // checkOnChain returns the rejection reason, or "" if the chain confirms the
 // issuer is trusted and the credential is registered, active and unexpired.
 func (s *Service) checkOnChain(ctx context.Context, c *credential.Claims, signedWith ed25519.PublicKey) Reason {
-	issuerID := blockchain.IssuerID(c.Issuer)
+	issuerID := registry.IssuerID(c.Issuer)
 	issuer, err := s.chain.GetIssuer(ctx, issuerID)
 	switch {
-	case errors.Is(err, blockchain.ErrNotFound):
+	case errors.Is(err, registry.ErrNotFound):
 		return ReasonUntrustedIssuer
 	case err != nil:
 		return ReasonUnavailable
@@ -141,9 +142,9 @@ func (s *Service) checkOnChain(ctx context.Context, c *credential.Claims, signed
 		return ReasonUntrustedIssuer
 	}
 
-	status, err := s.chain.GetCredentialStatus(ctx, blockchain.CredentialRef(c.ID))
+	status, err := s.chain.GetCredentialStatus(ctx, registry.CredentialRef(c.ID))
 	switch {
-	case errors.Is(err, blockchain.ErrNotFound):
+	case errors.Is(err, registry.ErrNotFound):
 		return ReasonNotRegistered
 	case err != nil:
 		return ReasonUnavailable
@@ -151,9 +152,9 @@ func (s *Service) checkOnChain(ctx context.Context, c *credential.Claims, signed
 	switch {
 	case status.IssuerID != issuerID:
 		return ReasonNotRegistered
-	case status.State == blockchain.CredentialRevoked:
+	case status.State == registry.CredentialRevoked:
 		return ReasonRevoked
-	case status.State != blockchain.CredentialActive:
+	case status.State != registry.CredentialActive:
 		return ReasonUnavailable
 	case !s.now().Before(status.ExpiresAt):
 		return ReasonExpired

@@ -13,6 +13,8 @@ import (
 	"github.com/gagliardetto/solana-go"
 	"github.com/gagliardetto/solana-go/rpc"
 	"github.com/gagliardetto/solana-go/rpc/jsonrpc"
+
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/registry"
 )
 
 // --- Wire format ------------------------------------------------------------
@@ -37,18 +39,6 @@ func TestDiscriminatorsMatchIDL(t *testing.T) {
 		if got := hex.EncodeToString(c.got[:]); got != c.want {
 			t.Errorf("%s discriminator = %s, want %s", name, got, c.want)
 		}
-	}
-}
-
-func TestRefsAreDeterministicAndDomainSeparated(t *testing.T) {
-	if IssuerID("a") != IssuerID("a") || CredentialRef("a") != CredentialRef("a") {
-		t.Fatal("refs must be deterministic")
-	}
-	if IssuerID("a") == IssuerID("b") || CredentialRef("a") == CredentialRef("b") {
-		t.Fatal("different inputs must map to different refs")
-	}
-	if IssuerID("x") == CredentialRef("x") {
-		t.Fatal("issuer ids and credential refs must not collide for the same input")
 	}
 }
 
@@ -80,7 +70,7 @@ func registryData(authority solana.PublicKey, paused bool) []byte {
 }
 
 func TestDecodeRoundTrip(t *testing.T) {
-	id, ref := IssuerID("iss"), CredentialRef("jti")
+	id, ref := registry.IssuerID("iss"), registry.CredentialRef("jti")
 	pub, _, _ := ed25519.GenerateKey(nil)
 	auth := solana.NewWallet().PublicKey()
 
@@ -96,7 +86,7 @@ func TestDecodeRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if st.Ref != ref || st.IssuerID != id || st.State != CredentialRevoked || st.ExpiresAt.Unix() != 1800000000 {
+	if st.Ref != ref || st.IssuerID != id || st.State != registry.CredentialRevoked || st.ExpiresAt.Unix() != 1800000000 {
 		t.Fatalf("credential decoded wrong: %+v", st)
 	}
 
@@ -110,7 +100,7 @@ func TestDecodeRoundTrip(t *testing.T) {
 }
 
 func TestDecodeRejectsUntrustedAccounts(t *testing.T) {
-	id, ref := IssuerID("iss"), CredentialRef("jti")
+	id, ref := registry.IssuerID("iss"), registry.CredentialRef("jti")
 	pub, _, _ := ed25519.GenerateKey(nil)
 	auth := solana.NewWallet().PublicKey()
 	other := solana.NewWallet().PublicKey()
@@ -218,16 +208,16 @@ func (f *fakeRPC) GetBlockHeight(context.Context, rpc.CommitmentType) (uint64, e
 }
 
 func testClient(f *fakeRPC) (*Client, solana.PrivateKey, solana.PrivateKey) {
-	registry, issuer := solana.NewWallet().PrivateKey, solana.NewWallet().PrivateKey
+	registryKey, issuer := solana.NewWallet().PrivateKey, solana.NewWallet().PrivateKey
 	c := newClient(f, options{
 		ProgramID:         testProgram,
-		RegistryAuthority: &registry,
+		RegistryAuthority: &registryKey,
 		IssuerAuthority:   &issuer,
 		Attempts:          3,
 		Backoff:           time.Millisecond,
 	})
 	c.sleep = func(context.Context, time.Duration) error { return nil }
-	return c, registry, issuer
+	return c, registryKey, issuer
 }
 
 func (f *fakeRPC) putIssuer(t *testing.T, c *Client, id [32]byte, key ed25519.PublicKey, authority solana.PublicKey, active bool) {
@@ -251,11 +241,11 @@ func (f *fakeRPC) putCredential(t *testing.T, c *Client, ref, issuer [32]byte, s
 func TestGetIssuer(t *testing.T) {
 	f := newFakeRPC()
 	c, _, _ := testClient(f)
-	id := IssuerID("iss")
+	id := registry.IssuerID("iss")
 	pub, _, _ := ed25519.GenerateKey(nil)
 	auth := solana.NewWallet().PublicKey()
 
-	if _, err := c.GetIssuer(context.Background(), id); !errors.Is(err, ErrNotFound) {
+	if _, err := c.GetIssuer(context.Background(), id); !errors.Is(err, registry.ErrNotFound) {
 		t.Fatalf("missing issuer: err = %v, want ErrNotFound", err)
 	}
 
@@ -269,7 +259,7 @@ func TestGetIssuer(t *testing.T) {
 func TestGetIssuerRejectsAccountForAnotherID(t *testing.T) {
 	f := newFakeRPC()
 	c, _, _ := testClient(f)
-	asked, other := IssuerID("asked"), IssuerID("other")
+	asked, other := registry.IssuerID("asked"), registry.IssuerID("other")
 	pub, _, _ := ed25519.GenerateKey(nil)
 	addr, _ := c.addrs.issuer(asked)
 	// The account at the asked-for address claims to be a different issuer.
@@ -283,7 +273,7 @@ func TestGetIssuerRejectsAccountForAnotherID(t *testing.T) {
 func TestReadRetriesTransientErrorsThenSucceeds(t *testing.T) {
 	f := newFakeRPC()
 	c, _, _ := testClient(f)
-	id := IssuerID("iss")
+	id := registry.IssuerID("iss")
 	pub, _, _ := ed25519.GenerateKey(nil)
 	f.putIssuer(t, c, id, pub, solana.NewWallet().PublicKey(), true)
 	f.accountErrs = []error{errors.New("connection reset"), errors.New("503")}
@@ -298,16 +288,16 @@ func TestReadFailsClosedWhenRPCStaysDown(t *testing.T) {
 	c, _, _ := testClient(f)
 	f.accountErrs = []error{errors.New("down"), errors.New("down"), errors.New("down")}
 
-	_, err := c.GetIssuer(context.Background(), IssuerID("iss"))
-	if !errors.Is(err, ErrUnavailable) || errors.Is(err, ErrNotFound) {
-		t.Fatalf("err = %v, want ErrUnavailable (and not ErrNotFound)", err)
+	_, err := c.GetIssuer(context.Background(), registry.IssuerID("iss"))
+	if !errors.Is(err, registry.ErrUnavailable) || errors.Is(err, registry.ErrNotFound) {
+		t.Fatalf("err = %v, want registry.ErrUnavailable (and not registry.ErrNotFound)", err)
 	}
 }
 
 func TestRegisterIssuerSendsAndConfirms(t *testing.T) {
 	f := newFakeRPC()
-	c, registry, _ := testClient(f)
-	id := IssuerID("iss")
+	c, registryKey, _ := testClient(f)
+	id := registry.IssuerID("iss")
 	pub, _, _ := ed25519.GenerateKey(nil)
 	auth := solana.NewWallet().PublicKey()
 
@@ -319,7 +309,7 @@ func TestRegisterIssuerSendsAndConfirms(t *testing.T) {
 		t.Fatalf("Changed=%v sent=%d, want a single transaction", res.Changed, len(f.sent))
 	}
 	tx := f.sent[0]
-	if payer := tx.Message.AccountKeys[0]; payer != registry.PublicKey() {
+	if payer := tx.Message.AccountKeys[0]; payer != registryKey.PublicKey() {
 		t.Fatalf("payer = %s, want the registry authority", payer)
 	}
 }
@@ -327,7 +317,7 @@ func TestRegisterIssuerSendsAndConfirms(t *testing.T) {
 func TestRegisterIssuerIsIdempotent(t *testing.T) {
 	f := newFakeRPC()
 	c, _, _ := testClient(f)
-	id := IssuerID("iss")
+	id := registry.IssuerID("iss")
 	pub, _, _ := ed25519.GenerateKey(nil)
 	auth := solana.NewWallet().PublicKey()
 	f.putIssuer(t, c, id, pub, auth, true)
@@ -338,7 +328,7 @@ func TestRegisterIssuerIsIdempotent(t *testing.T) {
 	}
 
 	otherKey, _, _ := ed25519.GenerateKey(nil)
-	if _, err := c.RegisterIssuer(context.Background(), id, otherKey, auth); !errors.Is(err, ErrConflict) {
+	if _, err := c.RegisterIssuer(context.Background(), id, otherKey, auth); !errors.Is(err, registry.ErrConflict) {
 		t.Fatalf("different key: err = %v, want ErrConflict", err)
 	}
 	if len(f.sent) != 0 {
@@ -349,7 +339,7 @@ func TestRegisterIssuerIsIdempotent(t *testing.T) {
 func TestConcurrentCreationCountsAsSuccess(t *testing.T) {
 	f := newFakeRPC()
 	c, _, _ := testClient(f)
-	id := IssuerID("iss")
+	id := registry.IssuerID("iss")
 	pub, _, _ := ed25519.GenerateKey(nil)
 	auth := solana.NewWallet().PublicKey()
 	// Our transaction is rejected ("already in use") because another request
@@ -388,7 +378,7 @@ func TestPreflightRejectionIsReported(t *testing.T) {
 	f.sendErrs = []error{&jsonrpc.RPCError{Code: -32002, Message: "Transaction simulation failed: custom program error: 0x1770"}}
 
 	pub, _, _ := ed25519.GenerateKey(nil)
-	_, err := c.RegisterIssuer(context.Background(), IssuerID("iss"), pub, solana.NewWallet().PublicKey())
+	_, err := c.RegisterIssuer(context.Background(), registry.IssuerID("iss"), pub, solana.NewWallet().PublicKey())
 	if !errors.Is(err, ErrTxRejected) {
 		t.Fatalf("err = %v, want ErrTxRejected", err)
 	}
@@ -403,7 +393,7 @@ func TestOnChainFailureIsReported(t *testing.T) {
 	f.status = &rpc.SignatureStatusesResult{Err: map[string]any{"InstructionError": []any{0, "Custom"}}}
 
 	pub, _, _ := ed25519.GenerateKey(nil)
-	_, err := c.RegisterIssuer(context.Background(), IssuerID("iss"), pub, solana.NewWallet().PublicKey())
+	_, err := c.RegisterIssuer(context.Background(), registry.IssuerID("iss"), pub, solana.NewWallet().PublicKey())
 	if !errors.Is(err, ErrTxRejected) {
 		t.Fatalf("err = %v, want ErrTxRejected", err)
 	}
@@ -415,7 +405,7 @@ func TestSendRetriesTransientErrors(t *testing.T) {
 	f.sendErrs = []error{errors.New("timeout"), errors.New("503"), nil}
 
 	pub, _, _ := ed25519.GenerateKey(nil)
-	res, err := c.RegisterIssuer(context.Background(), IssuerID("iss"), pub, solana.NewWallet().PublicKey())
+	res, err := c.RegisterIssuer(context.Background(), registry.IssuerID("iss"), pub, solana.NewWallet().PublicKey())
 	if err != nil || !res.Changed {
 		t.Fatalf("res=%+v err=%v, want success after retries", res, err)
 	}
@@ -428,11 +418,11 @@ func TestUnconfirmedTransactionIsUncertain(t *testing.T) {
 	c.sleep = func(context.Context, time.Duration) error { return context.DeadlineExceeded }
 
 	pub, _, _ := ed25519.GenerateKey(nil)
-	res, err := c.RegisterIssuer(context.Background(), IssuerID("iss"), pub, solana.NewWallet().PublicKey())
+	res, err := c.RegisterIssuer(context.Background(), registry.IssuerID("iss"), pub, solana.NewWallet().PublicKey())
 	if !errors.Is(err, ErrTxUncertain) {
 		t.Fatalf("err = %v, want ErrTxUncertain", err)
 	}
-	if res.Changed || res.Signature.IsZero() {
+	if res.Changed || res.Reference == "" {
 		t.Fatalf("res = %+v: must not report success but must carry the signature", res)
 	}
 }
@@ -444,7 +434,7 @@ func TestExpiredBlockhashIsReportedAsExpired(t *testing.T) {
 	f.height = f.lastValid + 1
 
 	pub, _, _ := ed25519.GenerateKey(nil)
-	_, err := c.RegisterIssuer(context.Background(), IssuerID("iss"), pub, solana.NewWallet().PublicKey())
+	_, err := c.RegisterIssuer(context.Background(), registry.IssuerID("iss"), pub, solana.NewWallet().PublicKey())
 	if !errors.Is(err, ErrTxExpired) {
 		t.Fatalf("err = %v, want ErrTxExpired", err)
 	}
@@ -455,10 +445,10 @@ func TestSignerRoles(t *testing.T) {
 	c := newClient(f, options{ProgramID: testProgram})
 	pub, _, _ := ed25519.GenerateKey(nil)
 
-	if _, err := c.RegisterIssuer(context.Background(), IssuerID("i"), pub, solana.NewWallet().PublicKey()); !errors.Is(err, ErrSignerMissing) {
+	if _, err := c.RegisterIssuer(context.Background(), registry.IssuerID("i"), pub, solana.NewWallet().PublicKey()); !errors.Is(err, ErrSignerMissing) {
 		t.Errorf("RegisterIssuer without registry key: err = %v", err)
 	}
-	if _, err := c.RegisterCredential(context.Background(), IssuerID("i"), CredentialRef("c"), time.Now().Add(time.Hour)); !errors.Is(err, ErrSignerMissing) {
+	if _, err := c.RegisterCredential(context.Background(), registry.IssuerID("i"), registry.CredentialRef("c"), time.Now().Add(time.Hour)); !errors.Is(err, ErrSignerMissing) {
 		t.Errorf("RegisterCredential without issuer key: err = %v", err)
 	}
 }
@@ -466,7 +456,7 @@ func TestSignerRoles(t *testing.T) {
 func TestRegisterCredentialIdempotentAndConflict(t *testing.T) {
 	f := newFakeRPC()
 	c, _, issuer := testClient(f)
-	iss, ref := IssuerID("iss"), CredentialRef("jti")
+	iss, ref := registry.IssuerID("iss"), registry.CredentialRef("jti")
 	exp := time.Unix(1900000000, 0)
 
 	res, err := c.RegisterCredential(context.Background(), iss, ref, exp)
@@ -481,7 +471,7 @@ func TestRegisterCredentialIdempotentAndConflict(t *testing.T) {
 	if res, err := c.RegisterCredential(context.Background(), iss, ref, exp); err != nil || res.Changed {
 		t.Fatalf("identical repeat: res=%+v err=%v, want no-op", res, err)
 	}
-	if _, err := c.RegisterCredential(context.Background(), iss, ref, exp.Add(time.Hour)); !errors.Is(err, ErrConflict) {
+	if _, err := c.RegisterCredential(context.Background(), iss, ref, exp.Add(time.Hour)); !errors.Is(err, registry.ErrConflict) {
 		t.Fatalf("different expiry: err = %v, want ErrConflict", err)
 	}
 }
@@ -489,9 +479,9 @@ func TestRegisterCredentialIdempotentAndConflict(t *testing.T) {
 func TestRevokeCredential(t *testing.T) {
 	f := newFakeRPC()
 	c, _, _ := testClient(f)
-	iss, ref := IssuerID("iss"), CredentialRef("jti")
+	iss, ref := registry.IssuerID("iss"), registry.CredentialRef("jti")
 
-	if _, err := c.RevokeCredential(context.Background(), iss, ref); !errors.Is(err, ErrNotFound) {
+	if _, err := c.RevokeCredential(context.Background(), iss, ref); !errors.Is(err, registry.ErrNotFound) {
 		t.Fatalf("unregistered credential: err = %v, want ErrNotFound", err)
 	}
 	if len(f.sent) != 0 {
@@ -513,10 +503,10 @@ func TestRevokeCredential(t *testing.T) {
 func TestSetIssuerStatusNoOpAndUnknown(t *testing.T) {
 	f := newFakeRPC()
 	c, _, _ := testClient(f)
-	id := IssuerID("iss")
+	id := registry.IssuerID("iss")
 	pub, _, _ := ed25519.GenerateKey(nil)
 
-	if _, err := c.SetIssuerStatus(context.Background(), id, false); !errors.Is(err, ErrNotFound) {
+	if _, err := c.SetIssuerStatus(context.Background(), id, false); !errors.Is(err, registry.ErrNotFound) {
 		t.Fatalf("unknown issuer: err = %v, want ErrNotFound", err)
 	}
 	f.putIssuer(t, c, id, pub, solana.NewWallet().PublicKey(), true)

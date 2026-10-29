@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/infrastructure/client/blockchain"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/registry"
 )
 
 // ApprovalSource hands out issuance approvals. ConsumeApproval must return each
@@ -24,12 +24,13 @@ type Issued struct {
 	ExpiresAt time.Time
 }
 
-// BlockchainClient is the part of the Solana connector's client
-// (internal/infrastructure/client/blockchain.Client) that issuance needs: recording an issued
-// credential in the on-chain registry so verifiers can later check its status.
-// RegisterCredential must be idempotent for repeated identical calls.
+// BlockchainClient is what issuance needs from the on-chain registry: a way to
+// record an issued credential so verifiers can later check its status. It is
+// expressed in domain types (internal/domain/registry); the Solana client in
+// internal/infrastructure/client/blockchain implements it. RegisterCredential
+// must be idempotent for repeated identical calls.
 type BlockchainClient interface {
-	RegisterCredential(ctx context.Context, issuerID, credentialRef [32]byte, expiresAt time.Time) (blockchain.WriteResult, error)
+	RegisterCredential(ctx context.Context, issuerID, credentialRef [32]byte, expiresAt time.Time) (registry.WriteResult, error)
 }
 
 // Service issues credentials for approvals from an ApprovalSource.
@@ -97,8 +98,8 @@ func (s *Service) IssueFromApproval(ctx context.Context, approvalID string) (Iss
 	exp := now.Add(s.ttl)
 	if s.chain != nil {
 		_, err := s.chain.RegisterCredential(ctx,
-			blockchain.IssuerID(s.signer.IssuerID()),
-			blockchain.CredentialRef(id),
+			registry.IssuerID(s.signer.IssuerID()),
+			registry.CredentialRef(id),
 			time.Unix(exp.Unix(), 0))
 		if err != nil {
 			return Issued{}, fmt.Errorf("credential: register: %w", err)

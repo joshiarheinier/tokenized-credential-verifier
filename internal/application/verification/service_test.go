@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/registry"
 	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/infrastructure/client/blockchain"
 )
 
 var now = time.Unix(1_793_000_000, 0)
@@ -45,17 +45,17 @@ var testPolicies = []domainverification.Policy{{
 }}
 
 type fakeBlockchainClient struct {
-	issuer    blockchain.IssuerRecord
+	issuer    registry.IssuerRecord
 	issuerErr error
-	status    blockchain.CredentialStatus
+	status    registry.CredentialStatus
 	statusErr error
 }
 
-func (f *fakeBlockchainClient) GetIssuer(_ context.Context, id [32]byte) (blockchain.IssuerRecord, error) {
+func (f *fakeBlockchainClient) GetIssuer(_ context.Context, id [32]byte) (registry.IssuerRecord, error) {
 	return f.issuer, f.issuerErr
 }
 
-func (f *fakeBlockchainClient) GetCredentialStatus(_ context.Context, ref [32]byte) (blockchain.CredentialStatus, error) {
+func (f *fakeBlockchainClient) GetCredentialStatus(_ context.Context, ref [32]byte) (registry.CredentialStatus, error) {
 	return f.status, f.statusErr
 }
 
@@ -92,13 +92,13 @@ func newFixture(t *testing.T) *fixture {
 	v := credential.NewVerifier(testSchemas, func() time.Time { return now })
 	v.Trust(issuerName, pub)
 
-	issuerID := blockchain.IssuerID(issuerName)
+	issuerID := registry.IssuerID(issuerName)
 	reg := &fakeBlockchainClient{
-		issuer: blockchain.IssuerRecord{IssuerID: issuerID, SigningKey: pub, Active: true},
-		status: blockchain.CredentialStatus{
-			Ref:       blockchain.CredentialRef(credID),
+		issuer: registry.IssuerRecord{IssuerID: issuerID, SigningKey: pub, Active: true},
+		status: registry.CredentialStatus{
+			Ref:       registry.CredentialRef(credID),
 			IssuerID:  issuerID,
-			State:     blockchain.CredentialActive,
+			State:     registry.CredentialActive,
 			ExpiresAt: now.Add(time.Hour),
 		},
 	}
@@ -122,12 +122,12 @@ func TestChainRejections(t *testing.T) {
 		break_ func(*fakeBlockchainClient)
 		want   Reason
 	}{
-		{"issuer not registered", func(r *fakeBlockchainClient) { r.issuerErr = blockchain.ErrNotFound }, ReasonUntrustedIssuer},
+		{"issuer not registered", func(r *fakeBlockchainClient) { r.issuerErr = registry.ErrNotFound }, ReasonUntrustedIssuer},
 		{"issuer suspended", func(r *fakeBlockchainClient) { r.issuer.Active = false }, ReasonUntrustedIssuer},
 		{"registry attests a different signing key", func(r *fakeBlockchainClient) { r.issuer.SigningKey = otherKey }, ReasonUntrustedIssuer},
-		{"credential not registered", func(r *fakeBlockchainClient) { r.statusErr = blockchain.ErrNotFound }, ReasonNotRegistered},
-		{"credential registered by another issuer", func(r *fakeBlockchainClient) { r.status.IssuerID = blockchain.IssuerID("other") }, ReasonNotRegistered},
-		{"credential revoked", func(r *fakeBlockchainClient) { r.status.State = blockchain.CredentialRevoked }, ReasonRevoked},
+		{"credential not registered", func(r *fakeBlockchainClient) { r.statusErr = registry.ErrNotFound }, ReasonNotRegistered},
+		{"credential registered by another issuer", func(r *fakeBlockchainClient) { r.status.IssuerID = registry.IssuerID("other") }, ReasonNotRegistered},
+		{"credential revoked", func(r *fakeBlockchainClient) { r.status.State = registry.CredentialRevoked }, ReasonRevoked},
 		{"credential expired on chain", func(r *fakeBlockchainClient) { r.status.ExpiresAt = now }, ReasonExpired},
 		{"unknown on-chain state", func(r *fakeBlockchainClient) { r.status.State = 9 }, ReasonUnavailable},
 	}
@@ -150,8 +150,8 @@ func TestChainRejections(t *testing.T) {
 // never be read as a verdict on the credential and never be accepted.
 func TestVerificationFailsClosedWhenChainCannotBeRead(t *testing.T) {
 	for name, errs := range map[string]error{
-		"rpc unavailable":   blockchain.ErrUnavailable,
-		"invalid account":   blockchain.ErrInvalidAccount,
+		"rpc unavailable":   registry.ErrUnavailable,
+		"invalid account":   errors.New("account has an unexpected layout"),
 		"arbitrary failure": errors.New("boom"),
 		"context deadline":  context.DeadlineExceeded,
 	} {
@@ -174,7 +174,7 @@ func TestVerificationFailsClosedWhenChainCannotBeRead(t *testing.T) {
 
 func TestLocalFailuresDoNotConsultTheChain(t *testing.T) {
 	f := newFixture(t)
-	f.reg.issuerErr = blockchain.ErrUnavailable // would turn into "unavailable" if consulted
+	f.reg.issuerErr = registry.ErrUnavailable   // would turn into "unavailable" if consulted
 	f.token = f.token[:len(f.token)-4] + "AAAA" // corrupt the signature
 	if res := f.verify(); res.Reason != ReasonInvalidSignature {
 		t.Fatalf("Reason = %q, want invalid_signature", res.Reason)
@@ -183,7 +183,7 @@ func TestLocalFailuresDoNotConsultTheChain(t *testing.T) {
 
 func TestWithoutRegistryOnlyLocalChecksApply(t *testing.T) {
 	f := newFixture(t)
-	f.reg.issuerErr = blockchain.ErrUnavailable
+	f.reg.issuerErr = registry.ErrUnavailable
 	svc := NewService(credentialVerifier(t, f), testPolicies)
 	if res := svc.Verify(context.Background(), f.token); !res.Valid {
 		t.Fatalf("Valid = false (%s), want true without a registry", res.Reason)
