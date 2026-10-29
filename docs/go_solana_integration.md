@@ -6,10 +6,11 @@ How the Go backend uses the registry program. Program details are in `solana_reg
 
 | Package | Role |
 |---|---|
-| `internal/infrastructure/client/blockchain` | Connector to the registry program, kept free of application code (it imports nothing from `internal/`). The only package that imports the Solana SDK. Reads accounts, builds and confirms transactions, maps ids. Built with `blockchain.NewClient(blockchain.Config{...})`. |
-| `internal/verification` | Applies the on-chain checks, depending only on a small `BlockchainClient` interface (the read side of the connector client). |
-| `internal/credential` | Issues credentials; calls an optional `BlockchainClient` (the register side of the connector client) before returning one. Signing and verification never touch the chain. |
-| `internal/app` | Wires them from configuration; optional dev-only registry bootstrap. |
+| `internal/infrastructure/client/blockchain` | Client for the registry program. It imports nothing else from the project, and is the only package that imports the Solana SDK. Reads accounts, builds and confirms transactions, maps ids. Built with `blockchain.NewClient(blockchain.Config{...})`. |
+| `internal/application/verification` | Applies the on-chain checks, depending only on a small `BlockchainClient` interface (the read side of the client). |
+| `internal/application/credential` | Issues credentials; calls an optional `BlockchainClient` (the register side of the client) before returning one. |
+| `internal/domain/...` | Credential model, signing and verification, and policy. No blockchain dependency: signing and verification never touch the chain. |
+| `cmd/api` | Composition root: builds the client from configuration, injects it into the services, and runs the optional dev-only registry bootstrap. |
 
 SDK: `github.com/gagliardetto/solana-go` v1.25.0. The TD names `github.com/solana-foundation/solana-go`, but the repository moved orgs without changing its module path, so Go only accepts the old path. It is the same code.
 
@@ -51,7 +52,7 @@ Signing roles: the **registry authority** key signs initialize, register-issuer 
 
 ## Verification
 
-With the registry enabled, `verification.Service` checks, after signature, expiry and policy:
+With the registry enabled, the verification service first applies the local checks (signature, expiry, the type's policy including its issuer allow-list), then checks the chain:
 
 1. The issuer exists on chain and is active.
 2. The on-chain `issuer_signing_key` equals the key the credential was verified with.
@@ -94,7 +95,7 @@ Consequence: a registration failure leaves that simulated approval consumed, and
 
 - `go test ./...`: unit tests with a fake RPC. Cover the wire format (discriminators pinned to the IDL), account decoding, retries, confirmation, idempotency, conflicts, and fail-closed behaviour. No validator needed.
 - `bash scripts/integration-test.sh`: starts `solana-test-validator` in WSL with the program deployed, then runs the `integration`-tagged tests against it, one package at a time:
-  - `internal/infrastructure/client/blockchain`: the connector alone (full registry lifecycle, concurrent identical requests, program-side authorization).
-  - `internal/verification`: end-to-end issue and verify against real chain state, and an unreachable chain.
-  - `internal/app`: the running application with bootstrap, over HTTP.
-  - Shared helpers live in `internal/testutil`; the connector keeps its own so it does not import `internal/`.
+  - `internal/infrastructure/client/blockchain`: the client alone (full registry lifecycle, concurrent identical requests, program-side authorization).
+  - `internal/application/verification`: end-to-end issue and verify against real chain state, and an unreachable chain.
+  - `cmd/api`: the running server with bootstrap, over HTTP.
+  - Shared helpers live in `internal/testutil`; the client's own integration test keeps its own copies.

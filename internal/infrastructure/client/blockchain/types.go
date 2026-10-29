@@ -1,7 +1,7 @@
 // Package blockchain is the adapter between the application and the Solana
 // registry program in contracts/credential-registry. It is the only package that
-// imports the Solana SDK; business logic depends on the small interfaces and
-// plain types declared here.
+// imports the Solana SDK. The application layer depends on the plain types and
+// id helpers declared here, and defines its own small interfaces over Client.
 //
 // All data read from an RPC node is treated as untrusted: accounts are checked
 // for the expected owner, discriminator and exact size before use, and any

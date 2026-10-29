@@ -1,4 +1,5 @@
 package verification
+
 import "testing"
 
 func TestPolicySatisfied(t *testing.T) {
@@ -71,4 +72,3 @@ func TestAcceptsIssuer(t *testing.T) {
 		}
 	}
 }
-

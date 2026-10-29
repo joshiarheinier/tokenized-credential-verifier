@@ -1,12 +1,3 @@
-// Package approval holds an issuer's decisions to issue credentials. A decision
-// (approved or rejected, for a subject and credential type) is recorded once and,
-// if approved, consumed exactly once when the credential is issued.
-//
-// The decisions themselves come from outside: in production from the issuer's
-// own process (an identity check, a ticket purchase, a membership signup). This
-// in-memory Service is the development implementation, and the dev-only
-// /v1/approvals/simulate endpoint is what lets a caller declare a decision
-// without any real check. That endpoint must never be exposed in production.
 package approval
 
 import (
@@ -19,10 +10,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/credential"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
 )
 
-// Outcome is a simulated approval decision.
+// Outcome is an approval decision.
 type Outcome string
 
 const (

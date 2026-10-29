@@ -1,4 +1,4 @@
-package httpapi_test
+package http_test
 
 import (
 	"context"
@@ -19,7 +19,7 @@ import (
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential/kyc"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/issuer"
 	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/httpapi"
+	httpgateway "github.com/joshiarheinier/tokenized-credential-verifier/internal/gateways/http"
 )
 
 var startTime = time.Unix(1_793_000_000, 0)
@@ -61,7 +61,7 @@ func newEnv(t *testing.T, withIssuance bool) *testEnv {
 	}
 	v := domaincredential.NewVerifier(schemas, clock)
 	v.Trust(iss.ID, iss.Signer.PublicKey())
-	api := httpapi.API{CredentialVerification: verification.NewService(v, policies)}
+	api := httpgateway.API{CredentialVerification: verification.NewService(v, policies)}
 	if withIssuance {
 		approvals := approval.NewService(schemas)
 		svc, err := credential.NewService(iss.Signer, approvals, schemas, time.Hour, clock)
@@ -70,7 +70,7 @@ func newEnv(t *testing.T, withIssuance bool) *testEnv {
 		}
 		api.ApprovalSimulation, api.CredentialIssuance = approvals, svc
 	}
-	srv := httptest.NewServer(httpapi.NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), api))
+	srv := httptest.NewServer(httpgateway.NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), api))
 	t.Cleanup(srv.Close)
 	return &testEnv{srv: srv, now: &now, iss: iss}
 }
@@ -264,8 +264,8 @@ func TestVerifyDistinguishesUnavailableFromInvalid(t *testing.T) {
 		{verification.ReasonUntrustedIssuer, http.StatusOK},
 		{verification.ReasonUnavailable, http.StatusServiceUnavailable},
 	} {
-		api := httpapi.API{CredentialVerification: stubVerification{verification.Result{Reason: tc.reason}}}
-		srv := httptest.NewServer(httpapi.NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), api))
+		api := httpgateway.API{CredentialVerification: stubVerification{verification.Result{Reason: tc.reason}}}
+		srv := httptest.NewServer(httpgateway.NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), api))
 		resp, err := http.Post(srv.URL+"/v1/credentials/verify", "application/json", strings.NewReader(`{"credential":"x"}`))
 		if err != nil {
 			t.Fatal(err)

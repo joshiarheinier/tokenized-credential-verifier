@@ -8,10 +8,10 @@ Where this file and `td_init_project.md` disagree, this file reflects the curren
 
 | Piece | Generic? |
 |---|---|
-| Signing, signature and expiry checks (`internal/credential`) | Yes |
+| Signing, signature and expiry checks (`internal/domain/credential`) | Yes |
 | On-chain issuer trust and revocation (`internal/infrastructure/client/blockchain`, the Anchor program) | Yes. The program never sees a credential type or claims. |
 | Which claims a type has, and their kinds | Per type: a `credential.Schema` |
-| What a relying application demands of a type | Per application: a `verification.Policy` |
+| What a relying application demands of a type | Per application: a `verification.Policy` (`internal/domain/verification`) |
 
 ## Schema
 
@@ -51,8 +51,8 @@ verification.Policy{
 
 ## Adding a credential type
 
-1. Define its `Schema` (the KYC one is in `internal/credential/kyc`).
-2. In `internal/app/app.go`, `credentialTypes()`: add the schema to `credential.NewSchemas(...)` and add a `Policy` for it, naming the issuers you accept for it.
+1. Define its `Schema` (the KYC one is in `internal/domain/credential/kyc`).
+2. In `cmd/api/main.go`, `credentialTypes()`: add the schema to `credential.NewSchemas(...)` and add a `Policy` for it, naming the issuers you accept for it.
 3. Issuance: whatever approves an issuance (an identity check, a purchase) produces a `credential.Approval{Subject, CredentialType, Claims}`. In development the `/v1/approvals/simulate` endpoint creates one for any registered type.
 
 No change is needed to verification, the registry or the Solana program.

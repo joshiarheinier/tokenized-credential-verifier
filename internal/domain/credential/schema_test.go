@@ -90,4 +90,3 @@ func TestNewSchemasRejectsBadDefinitions(t *testing.T) {
 		t.Errorf("Types() = %v, want sorted [A B]", got)
 	}
 }
-

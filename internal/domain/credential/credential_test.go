@@ -274,4 +274,3 @@ func TestNewSignerValidation(t *testing.T) {
 		t.Error("short key accepted")
 	}
 }
-

@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/credential"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
 )
 
 const testType = "TestPass"

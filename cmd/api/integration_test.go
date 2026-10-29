@@ -1,6 +1,6 @@
 //go:build integration
 
-package app
+package main
 
 import (
 	"context"
@@ -15,8 +15,8 @@ import (
 
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/config"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/issuer"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/testutil"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/infrastructure/client/blockchain"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/testutil"
 )
 
 func post(t *testing.T, url, body string) (int, map[string]any) {
@@ -31,10 +31,10 @@ func post(t *testing.T, url, body string) (int, map[string]any) {
 	return resp.StatusCode, m
 }
 
-// TestAppIssuesAndVerifiesAgainstChain boots the real application with registry
+// TestIssuesAndVerifiesAgainstChain boots the real server with registry
 // bootstrap enabled and drives it over HTTP: simulate an approval, issue a credential
 // (which registers it on chain) and verify it.
-func TestAppIssuesAndVerifiesAgainstChain(t *testing.T) {
+func TestIssuesAndVerifiesAgainstChain(t *testing.T) {
 	chain := testutil.RequireChain(t)
 
 	// The registry authority pays for bootstrap transactions.
@@ -67,9 +67,9 @@ func TestAppIssuesAndVerifiesAgainstChain(t *testing.T) {
 	}
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-	app, err := New(cfg, logger)
+	srv, err := newServer(cfg, logger)
 	if err != nil {
-		t.Fatalf("New (bootstrap): %v", err)
+		t.Fatalf("newServer (bootstrap): %v", err)
 	}
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -80,7 +80,7 @@ func TestAppIssuesAndVerifiesAgainstChain(t *testing.T) {
 	defer cancel()
 	serveCtx, stop := context.WithCancel(ctx)
 	done := make(chan error, 1)
-	go func() { done <- app.Serve(serveCtx, ln) }()
+	go func() { done <- serve(serveCtx, srv, ln, cfg, logger) }()
 	defer func() { stop(); <-done }()
 	base := "http://" + ln.Addr().String()
 
@@ -98,7 +98,7 @@ func TestAppIssuesAndVerifiesAgainstChain(t *testing.T) {
 	}
 
 	// A second boot against the same chain must be a clean no-op (idempotent bootstrap).
-	if _, err := New(cfg, logger); err != nil {
+	if _, err := newServer(cfg, logger); err != nil {
 		t.Fatalf("second bootstrap: %v", err)
 	}
 }

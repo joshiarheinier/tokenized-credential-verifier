@@ -1,6 +1,14 @@
-// Package httpapi exposes the backend over HTTP: routing, middleware and
-// handlers. It is named httpapi rather than http to avoid shadowing net/http.
-package httpapi
+// Package http is the HTTP gateway: how the outside world reaches the
+// application. It holds routing, middleware and handlers, translates requests
+// into calls on the application services (approval, credential issuance,
+// verification) and their results into responses. It contains no business
+// rules of its own.
+//
+// The package is named after its directory (internal/gateways/http) and
+// therefore has the same name as net/http, which it imports under the usual
+// name. Importers that also use net/http should alias this package, for
+// example as httpgateway.
+package http
 
 import (
 	"encoding/json"

@@ -1,9 +1,9 @@
 // Package credential defines the signed credential: its data model, signing
 // and verification. It is independent of what a credential attests: credential
 // types (KYC status, a ticket, a membership, ...) are described by a Schema and
-// registered in a Schemas set. Signing and verification never touch the
-// blockchain; only the optional on-chain registration at issuance does, through
-// the BlockchainClient interface.
+// registered in a Schemas set. It is pure domain code: it has no dependency on
+// the blockchain, HTTP or any other infrastructure. On-chain registration and
+// status checks are the application layer's concern.
 //
 // Format: a compact JWS (RFC 7515) with alg=EdDSA (Ed25519), carrying a
 // JWT-style claim set. It follows the shape of a W3C Verifiable Credential but

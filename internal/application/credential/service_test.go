@@ -165,11 +165,11 @@ func TestNewServiceValidation(t *testing.T) {
 	approvals := &fakeApprovals{}
 
 	tests := []struct {
-		name     string
-		signer   *domaincredential.Signer
+		name      string
+		signer    *domaincredential.Signer
 		approvals ApprovalSource
-		schemas  *domaincredential.Schemas
-		ttl      time.Duration
+		schemas   *domaincredential.Schemas
+		ttl       time.Duration
 	}{
 		{name: "nil signer", signer: nil, approvals: approvals, schemas: testSchemas, ttl: time.Hour},
 		{name: "nil approvals", signer: signer, approvals: nil, schemas: testSchemas, ttl: time.Hour},

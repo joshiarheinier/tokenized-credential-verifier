@@ -40,7 +40,7 @@ func TestVerifyAppliesPolicyPerType(t *testing.T) {
 
 func TestIssuerAllowListIsPerType(t *testing.T) {
 	f := newFixture(t)
-	verify := func(p Policy) Result {
+	verify := func(p domainverification.Policy) Result {
 		return NewService(credentialVerifier(t, f), []domainverification.Policy{p}).Verify(context.Background(), f.token)
 	}
 	base := domainverification.Policy{CredentialType: testType, Require: []domainverification.Requirement{{Claim: "active", Equals: true}}}

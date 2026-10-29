@@ -42,7 +42,7 @@ done
 cd "$ROOT"
 # Default to every package; -p 1 runs packages one at a time since they share
 # one validator.
-if [ "$#" -eq 0 ]; then set -- ./internal/... ./pkg/...; fi
+if [ "$#" -eq 0 ]; then set -- ./internal/... ./cmd/...; fi
 CREDENTIAL_TEST_RPC_URL="$RPC_URL" \
 CREDENTIAL_TEST_PROGRAM_ID="$PROGRAM_ID" \
 CREDENTIAL_TEST_AUTHORITY_KEYPAIR="$(cygpath -m "$ROOT/.local/test-authority-keypair.json")" \

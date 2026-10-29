@@ -1,4 +1,4 @@
-package app
+package main
 
 import (
 	"context"
@@ -23,12 +23,13 @@ func TestServeAndGracefulShutdown(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	a, err := New(cfg, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	srv, err := newServer(cfg, logger)
 	if err != nil {
-		t.Fatalf("New: %v", err)
+		t.Fatalf("newServer: %v", err)
 	}
 	done := make(chan error, 1)
-	go func() { done <- a.Serve(ctx, ln) }()
+	go func() { done <- serve(ctx, srv, ln, cfg, logger) }()
 
 	client := &http.Client{Timeout: 2 * time.Second}
 	resp, err := client.Get("http://" + ln.Addr().String() + "/healthz")
@@ -44,9 +45,9 @@ func TestServeAndGracefulShutdown(t *testing.T) {
 	select {
 	case err := <-done:
 		if err != nil {
-			t.Fatalf("Serve returned %v, want nil after shutdown", err)
+			t.Fatalf("serve returned %v, want nil after shutdown", err)
 		}
 	case <-time.After(5 * time.Second):
-		t.Fatal("Serve did not return after context cancellation")
+		t.Fatal("serve did not return after context cancellation")
 	}
 }

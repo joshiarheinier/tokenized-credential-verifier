@@ -357,47 +357,35 @@ Events must not include personal information or full credential contents.
 
 ## 6. Go Backend Design
 
-### 6.1 Suggested Package Structure
+### 6.1 Package Structure
 
-Start with a modular monolith rather than separate microservices.
+Start with a modular monolith rather than separate microservices, organized in layers.
 
 ```text
-identity-kyc/
+tokenized-credential-verifier/
 ├── cmd/
-│   └── api/
-│       └── main.go
+│   ├── api/                       composition root: config, wiring, HTTP server
+│   └── issuerkeygen/
 ├── internal/
+│   ├── domain/                    business rules; depends on nothing below
+│   │   ├── credential/            model, schemas, signer, verifier
+│   │   │   └── kyc/               the first credential type
+│   │   ├── issuer/
+│   │   └── verification/          relying-application policy
+│   ├── application/               use cases
+│   │   ├── approval/
+│   │   ├── credential/            issuance
+│   │   └── verification/
+│   ├── gateways/
+│   │   └── http/                  routes, middleware, handlers
+│   ├── infrastructure/
+│   │   ├── client/
+│   │   │   └── blockchain/        Solana registry client
+│   │   ├── logging/
+│   │   └── repository/            (planned) PostgreSQL implementations
 │   ├── config/
-│   │   └── config.go
-│   ├── http/
-│   │   ├── router.go
-│   │   ├── middleware.go
-│   │   └── handlers/
-│   ├── identity/
-│   │   ├── model.go
-│   │   └── service.go
-│   ├── credential/
-│   │   ├── model.go
-│   │   ├── signer.go
-│   │   ├── verifier.go
-│   │   └── service.go
-│   ├── issuer/
-│   │   ├── model.go
-│   │   └── service.go
-│   ├── verification/
-│   │   ├── policy.go
-│   │   └── service.go
-│   ├── blockchain/
-│   │   ├── client.go
-│   │   ├── solana.go
-│   │   ├── accounts.go
-│   │   └── transactions.go
-│   ├── repository/
-│   │   ├── interfaces.go
-│   │   └── postgres/
-│   └── app/
-│       └── app.go
-├── migrations/
+│   └── testutil/
+├── migrations/                    (planned)
 ├── contracts/
 │   └── credential-registry/
 │       ├── Anchor.toml
@@ -405,7 +393,7 @@ identity-kyc/
 │       ├── programs/
 │       └── tests/
 ├── api/
-│   └── openapi.yaml
+│   └── openapi.yaml               (planned)
 ├── scripts/
 ├── .env.example
 ├── .gitignore
@@ -415,7 +403,7 @@ identity-kyc/
 └── README.md
 ```
 
-This is a target layout, not a requirement to create every file during initialization. Add packages when their responsibilities become real.
+Dependencies point inward: gateways call application services, which use the domain; the domain imports nothing else from the project. `cmd/api` constructs the concrete implementations and injects them. Packages marked planned are added when their responsibilities become real.
 
 ### 6.2 Dependency Direction
 
