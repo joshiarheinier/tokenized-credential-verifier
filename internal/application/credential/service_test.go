@@ -9,7 +9,7 @@ import (
 	"time"
 
 	domaincredential "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
-	"github.com/joshiarheinier/tokenized-credential-verifier/pkg/connector/blockchain"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/infrastructure/client/blockchain"
 )
 
 const testType = "TestPass"

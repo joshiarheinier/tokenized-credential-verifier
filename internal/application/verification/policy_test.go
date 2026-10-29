@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
-	"github.com/joshiarheinier/tokenized-credential-verifier/pkg/connector/blockchain"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/infrastructure/client/blockchain"
 )
 
 func TestVerifyAppliesPolicyPerType(t *testing.T) {

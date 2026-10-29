@@ -24,7 +24,7 @@ import (
 	"github.com/gagliardetto/solana-go"
 	"github.com/gagliardetto/solana-go/rpc"
 
-	"github.com/joshiarheinier/tokenized-credential-verifier/pkg/connector/blockchain"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/infrastructure/client/blockchain"
 )
 
 type env struct {
