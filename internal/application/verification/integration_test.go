@@ -15,6 +15,7 @@ import (
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential/kyc"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/testutil"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/verification"
+	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
 	"github.com/joshiarheinier/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 
@@ -26,9 +27,9 @@ var schemas = func() *credential.Schemas {
 	return s
 }()
 
-var policies = []verification.Policy{{
+var policies = []domainverification.Policy{{
 	CredentialType: kyc.Type,
-	Require:        []verification.Requirement{{Claim: kyc.ClaimVerified, Equals: true}},
+	Require:        []domainverification.Requirement{{Claim: kyc.ClaimVerified, Equals: true}},
 }}
 
 type approvals struct{}

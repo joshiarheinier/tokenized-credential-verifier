@@ -14,6 +14,7 @@ import (
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/approval"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/config"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
+	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
 	issuance "github.com/joshiarheinier/tokenized-credential-verifier/internal/application/credential"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential/kyc"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/httpapi"
@@ -181,15 +182,15 @@ func bootstrapRegistry(chain *blockchain.Client, iss *issuer.Issuer, txTimeout t
 //
 // issuerID is this deployment's own issuer, the only one it trusts today, so
 // it is the only issuer each policy accepts.
-func credentialTypes(issuerID string) (*credential.Schemas, []verification.Policy, error) {
+func credentialTypes(issuerID string) (*credential.Schemas, []domainverification.Policy, error) {
 	schemas, err := credential.NewSchemas(kyc.Schema)
 	if err != nil {
 		return nil, nil, fmt.Errorf("credential types: %w", err)
 	}
-	policies := []verification.Policy{
+	policies := []domainverification.Policy{
 		{
 			CredentialType:  kyc.Type,
-			Require:         []verification.Requirement{{Claim: kyc.ClaimVerified, Equals: true}},
+			Require:         []domainverification.Requirement{{Claim: kyc.ClaimVerified, Equals: true}},
 			AcceptedIssuers: []string{issuerID},
 		},
 	}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
+	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
 	"github.com/joshiarheinier/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 
@@ -38,9 +39,9 @@ var testSchemas = func() *credential.Schemas {
 }()
 
 // testPolicies accepts active memberships.
-var testPolicies = []Policy{{
+var testPolicies = []domainverification.Policy{{
 	CredentialType: testType,
-	Require:        []Requirement{{Claim: "active", Equals: true}},
+	Require:        []domainverification.Requirement{{Claim: "active", Equals: true}},
 }}
 
 type fakeBlockchainClient struct {

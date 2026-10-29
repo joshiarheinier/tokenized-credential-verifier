@@ -1,4 +1,4 @@
-// Package verification applies a relying application's acceptance policy on
+// Package verification defines domain acceptance policies for
 // top of cryptographic credential verification, and checks issuer trust and
 // credential status on chain.
 package verification
@@ -36,7 +36,7 @@ type Policy struct {
 
 // acceptsIssuer reports whether credentials of this type from issuer are
 // acceptable. Issuer identifiers are compared exactly.
-func (p Policy) acceptsIssuer(issuer string) bool {
+func (p Policy) AcceptsIssuer(issuer string) bool {
 	return len(p.AcceptedIssuers) == 0 || slices.Contains(p.AcceptedIssuers, issuer)
 }
 
@@ -53,7 +53,7 @@ func (p Policy) Satisfied(claims map[string]any) bool {
 }
 
 // disclosed returns the claims to hand back to the application.
-func (p Policy) disclosed(claims map[string]any) map[string]any {
+func (p Policy) Disclosed(claims map[string]any) map[string]any {
 	out := make(map[string]any, len(claims))
 	if p.Disclose == nil {
 		for k, v := range claims {

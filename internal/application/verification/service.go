@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
+	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
 	"github.com/joshiarheinier/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 
@@ -56,7 +57,7 @@ type BlockchainClient interface {
 // recorded on chain.
 type Service struct {
 	verifier *credential.Verifier
-	policies map[string]Policy // by credential type
+	policies map[string]domainverification.Policy // by credential type
 	chain    BlockchainClient
 	now      func() time.Time
 }
@@ -75,7 +76,7 @@ func WithClock(now func() time.Time) Option { return func(s *Service) { s.now = 
 // NewService returns a Service that accepts only the credential types it has a
 // policy for; a credential of any other type is rejected as unsupported. If
 // several policies name the same type the last one wins.
-func NewService(v *credential.Verifier, policies []Policy, opts ...Option) *Service {
+func NewService(v *credential.Verifier, policies []domainverification.Policy, opts ...Option) *Service {
 	s := &Service{verifier: v, policies: make(map[string]Policy, len(policies)), now: time.Now}
 	for _, p := range policies {
 		s.policies[p.CredentialType] = p
@@ -103,7 +104,7 @@ func (s *Service) Verify(ctx context.Context, token string) Result {
 	}
 	// Cheap local checks first: who issued it, then what it says. Neither
 	// needs the chain.
-	if !policy.acceptsIssuer(c.Issuer) {
+	if !policy.AcceptsIssuer(c.Issuer) {
 		return Result{Reason: ReasonUntrustedIssuer}
 	}
 	if !policy.Satisfied(c.Attributes) {
@@ -119,7 +120,7 @@ func (s *Service) Verify(ctx context.Context, token string) Result {
 		Issuer:         c.Issuer,
 		CredentialType: c.CredentialType,
 		ExpiresAt:      time.Unix(c.ExpiresAt, 0).UTC(),
-		Claims:         policy.disclosed(c.Attributes),
+		Claims:         policy.Disclosed(c.Attributes),
 	}
 }
 
