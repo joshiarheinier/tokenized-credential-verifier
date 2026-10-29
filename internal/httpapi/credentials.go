@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/approval"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/credential"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/verification"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/verification"
 )
 
 const maxBodyBytes = 16 * 1024

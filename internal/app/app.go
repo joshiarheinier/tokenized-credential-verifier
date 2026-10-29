@@ -13,11 +13,11 @@ import (
 
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/approval"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/config"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/credential"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/credential/kyc"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential/kyc"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/httpapi"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/issuer"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/verification"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/verification"
 	"github.com/joshiarheinier/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 

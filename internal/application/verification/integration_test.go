@@ -11,10 +11,10 @@ import (
 
 	"github.com/gagliardetto/solana-go"
 
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/credential"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/credential/kyc"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential/kyc"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/testutil"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/verification"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/verification"
 	"github.com/joshiarheinier/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 

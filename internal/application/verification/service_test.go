@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/credential"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
 	"github.com/joshiarheinier/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 

@@ -7,7 +7,7 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/credential"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
 )
 
 var seedEncoding = base64.RawURLEncoding.Strict()
