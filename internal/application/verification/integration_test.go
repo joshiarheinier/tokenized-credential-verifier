@@ -17,7 +17,7 @@ import (
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential/kyc"
 	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/testutil"
-	"github.com/joshiarheinier/tokenized-credential-verifier/pkg/connector/blockchain"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/infrastructure/client/blockchain"
 )
 
 var schemas = func() *domaincredential.Schemas {

@@ -10,7 +10,7 @@ import (
 
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
 	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
-	"github.com/joshiarheinier/tokenized-credential-verifier/pkg/connector/blockchain"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/infrastructure/client/blockchain"
 )
 
 var now = time.Unix(1_793_000_000, 0)

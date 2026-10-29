@@ -8,7 +8,7 @@ import (
 
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
 	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
-	"github.com/joshiarheinier/tokenized-credential-verifier/pkg/connector/blockchain"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/infrastructure/client/blockchain"
 )
 
 // Reason is a stable, coarse code explaining why a credential was rejected.
@@ -43,7 +43,7 @@ type Result struct {
 }
 
 // BlockchainClient is the part of the Solana connector's client
-// (pkg/connector/blockchain.Client) that verification needs: reading the
+// (internal/infrastructure/client/blockchain.Client) that verification needs: reading the
 // issuer and credential records from the on-chain registry. Errors must wrap
 // blockchain.ErrNotFound only when the record is known to be absent; any
 // failure to establish state must be a different error.

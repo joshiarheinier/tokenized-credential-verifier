@@ -6,7 +6,7 @@ How the Go backend uses the registry program. Program details are in `solana_reg
 
 | Package | Role |
 |---|---|
-| `pkg/connector/blockchain` | Connector to the registry program, kept free of application code (it imports nothing from `internal/`). The only package that imports the Solana SDK. Reads accounts, builds and confirms transactions, maps ids. Built with `blockchain.NewClient(blockchain.Config{...})`. |
+| `internal/infrastructure/client/blockchain` | Connector to the registry program, kept free of application code (it imports nothing from `internal/`). The only package that imports the Solana SDK. Reads accounts, builds and confirms transactions, maps ids. Built with `blockchain.NewClient(blockchain.Config{...})`. |
 | `internal/verification` | Applies the on-chain checks, depending only on a small `BlockchainClient` interface (the read side of the connector client). |
 | `internal/credential` | Issues credentials; calls an optional `BlockchainClient` (the register side of the connector client) before returning one. Signing and verification never touch the chain. |
 | `internal/app` | Wires them from configuration; optional dev-only registry bootstrap. |
@@ -15,7 +15,7 @@ SDK: `github.com/gagliardetto/solana-go` v1.25.0. The TD names `github.com/solan
 
 ## Identifier mapping
 
-The credential layer and the program use different identifiers. `pkg/connector/blockchain/helper.go` maps between them with domain-separated SHA-256:
+The credential layer and the program use different identifiers. `internal/infrastructure/client/blockchain/helper.go` maps between them with domain-separated SHA-256:
 
 | Credential claim | On-chain id |
 |---|---|
@@ -94,7 +94,7 @@ Consequence: a registration failure leaves that simulated approval consumed, and
 
 - `go test ./...`: unit tests with a fake RPC. Cover the wire format (discriminators pinned to the IDL), account decoding, retries, confirmation, idempotency, conflicts, and fail-closed behaviour. No validator needed.
 - `bash scripts/integration-test.sh`: starts `solana-test-validator` in WSL with the program deployed, then runs the `integration`-tagged tests against it, one package at a time:
-  - `pkg/connector/blockchain`: the connector alone (full registry lifecycle, concurrent identical requests, program-side authorization).
+  - `internal/infrastructure/client/blockchain`: the connector alone (full registry lifecycle, concurrent identical requests, program-side authorization).
   - `internal/verification`: end-to-end issue and verify against real chain state, and an unreachable chain.
   - `internal/app`: the running application with bootstrap, over HTTP.
   - Shared helpers live in `internal/testutil`; the connector keeps its own so it does not import `internal/`.

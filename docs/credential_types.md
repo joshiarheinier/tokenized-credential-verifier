@@ -9,7 +9,7 @@ Where this file and `td_init_project.md` disagree, this file reflects the curren
 | Piece | Generic? |
 |---|---|
 | Signing, signature and expiry checks (`internal/credential`) | Yes |
-| On-chain issuer trust and revocation (`pkg/connector/blockchain`, the Anchor program) | Yes. The program never sees a credential type or claims. |
+| On-chain issuer trust and revocation (`internal/infrastructure/client/blockchain`, the Anchor program) | Yes. The program never sees a credential type or claims. |
 | Which claims a type has, and their kinds | Per type: a `credential.Schema` |
 | What a relying application demands of a type | Per application: a `verification.Policy` |
 

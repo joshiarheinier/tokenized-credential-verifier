@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
-	"github.com/joshiarheinier/tokenized-credential-verifier/pkg/connector/blockchain"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/infrastructure/client/blockchain"
 )
 
 // ApprovalSource hands out issuance approvals. ConsumeApproval must return each
@@ -25,7 +25,7 @@ type Issued struct {
 }
 
 // BlockchainClient is the part of the Solana connector's client
-// (pkg/connector/blockchain.Client) that issuance needs: recording an issued
+// (internal/infrastructure/client/blockchain.Client) that issuance needs: recording an issued
 // credential in the on-chain registry so verifiers can later check its status.
 // RegisterCredential must be idempotent for repeated identical calls.
 type BlockchainClient interface {
