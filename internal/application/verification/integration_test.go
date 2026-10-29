@@ -11,8 +11,8 @@ import (
 
 	"github.com/gagliardetto/solana-go"
 
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
-	issuance "github.com/joshiarheinier/tokenized-credential-verifier/internal/application/credential"
+	domaincredential "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/credential"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential/kyc"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/testutil"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/verification"
@@ -20,8 +20,8 @@ import (
 	"github.com/joshiarheinier/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 
-var schemas = func() *credential.Schemas {
-	s, err := credential.NewSchemas(kyc.Schema)
+var schemas = func() *domaincredential.Schemas {
+	s, err := domaincredential.NewSchemas(kyc.Schema)
 	if err != nil {
 		panic(err)
 	}
@@ -35,8 +35,8 @@ var policies = []domainverification.Policy{{
 
 type approvals struct{}
 
-func (approvals) ConsumeApproval(context.Context, string) (credential.Approval, error) {
-	return credential.Approval{
+func (approvals) ConsumeApproval(context.Context, string) (domaincredential.Approval, error) {
+	return domaincredential.Approval{
 		Subject:        "user-1",
 		CredentialType: kyc.Type,
 		Claims:         map[string]any{kyc.ClaimVerified: true, kyc.ClaimOver18: true, kyc.ClaimCountry: "ID"},
@@ -56,7 +56,7 @@ func TestVerificationAgainstRealChain(t *testing.T) {
 
 	const issuerName = "did:example:e2e-issuer"
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
-	signer, err := credential.NewSigner(issuerName, priv)
+	signer, err := domaincredential.NewSigner(issuerName, priv)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,12 +65,12 @@ func TestVerificationAgainstRealChain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	issuing, err := issuance.NewService(signer, approvals{}, schemas, time.Hour, nil,
-		credential.WithBlockchainClient(client))
+	issuing, err := credential.NewService(signer, approvals{}, schemas, time.Hour, nil,
+		domaincredential.WithBlockchainClient(client))
 	if err != nil {
 		t.Fatal(err)
 	}
-	local := credential.NewVerifier(schemas, nil)
+	local := domaincredential.NewVerifier(schemas, nil)
 	local.Trust(issuerName, pub)
 	verifier := verification.NewService(local, policies, verification.WithBlockchainClient(client))
 
@@ -114,7 +114,7 @@ func TestVerificationAgainstRealChain(t *testing.T) {
 	expect(fresh, true, "")
 
 	// Credential never registered on chain: signed locally but unknown to the registry.
-	unregistered, err := issuance.NewService(signer, approvals{}, schemas, time.Hour, nil)
+	unregistered, err := credential.NewService(signer, approvals{}, schemas, time.Hour, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,8 +127,8 @@ func TestVerificationAgainstRealChain(t *testing.T) {
 	// A different key signing for a registered issuer name is rejected even
 	// though the registry knows the issuer.
 	_, otherPriv, _ := ed25519.GenerateKey(rand.Reader)
-	otherSigner, _ := credential.NewSigner(issuerName, otherPriv)
-	rogueIssuing, _ := issuance.NewService(otherSigner, approvals{}, schemas, time.Hour, nil)
+	otherSigner, _ := domaincredential.NewSigner(issuerName, otherPriv)
+	rogueIssuing, _ := credential.NewService(otherSigner, approvals{}, schemas, time.Hour, nil)
 	rogue, _ := rogueIssuing.IssueFromApproval(ctx, "a")
 	expect(rogue.Token, false, verification.ReasonUntrustedIssuer)
 }
@@ -138,13 +138,13 @@ func TestVerificationAgainstRealChain(t *testing.T) {
 // accepted.
 func TestVerificationFailsClosedWhenChainIsDown(t *testing.T) {
 	pub, priv, _ := ed25519.GenerateKey(rand.Reader)
-	signer, _ := credential.NewSigner("did:example:issuer", priv)
-	issuing, _ := issuance.NewService(signer, approvals{}, schemas, time.Hour, nil)
+	signer, _ := domaincredential.NewSigner("did:example:issuer", priv)
+	issuing, _ := credential.NewService(signer, approvals{}, schemas, time.Hour, nil)
 	issued, err := issuing.IssueFromApproval(context.Background(), "a")
 	if err != nil {
 		t.Fatal(err)
 	}
-	local := credential.NewVerifier(schemas, nil)
+	local := domaincredential.NewVerifier(schemas, nil)
 	local.Trust("did:example:issuer", pub)
 
 	dead, err := blockchain.NewClient(blockchain.Config{

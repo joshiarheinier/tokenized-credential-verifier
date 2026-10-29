@@ -13,9 +13,9 @@ import (
 
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/approval"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/config"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
+	domaincredential "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
 	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
-	issuance "github.com/joshiarheinier/tokenized-credential-verifier/internal/application/credential"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/credential"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential/kyc"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/httpapi"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/issuer"
@@ -68,7 +68,7 @@ func buildAPI(cfg config.Config, logger *slog.Logger) (httpapi.API, error) {
 	var (
 		chain      *blockchain.Client
 		verifyOpts []verification.Option
-		issueOpts  []issuance.ServiceOption
+		issueOpts  []credential.ServiceOption
 	)
 	if cfg.Solana.RPCURL != "" {
 		if chain, err = blockchain.NewClient(blockchain.Config{
@@ -83,7 +83,7 @@ func buildAPI(cfg config.Config, logger *slog.Logger) (httpapi.API, error) {
 			return httpapi.API{}, err
 		}
 		verifyOpts = append(verifyOpts, verification.WithBlockchainClient(chain))
-		issueOpts = append(issueOpts, issuance.WithBlockchainClient(chain))
+		issueOpts = append(issueOpts, credential.WithBlockchainClient(chain))
 		logger.Info("on-chain registry enabled", "rpc_url", cfg.Solana.RPCURL, "program_id", cfg.Solana.ProgramID, "commitment", cfg.Solana.Commitment)
 		if cfg.Solana.Bootstrap {
 			if err := bootstrapRegistry(chain, iss, cfg.Solana.TxTimeout, logger); err != nil {
@@ -98,14 +98,14 @@ func buildAPI(cfg config.Config, logger *slog.Logger) (httpapi.API, error) {
 	if err != nil {
 		return httpapi.API{}, err
 	}
-	verifier := credential.NewVerifier(schemas, nil)
+	verifier := domaincredential.NewVerifier(schemas, nil)
 	verifier.Trust(iss.ID, iss.Signer.PublicKey())
 	api := httpapi.API{CredentialVerification: verification.NewService(verifier, policies, verifyOpts...)}
 
 	if cfg.Simulation.Enabled {
 		logger.Warn("simulated approvals are enabled: for local development only")
 		approvals := approval.NewService(schemas)
-		issuing, err := issuance.NewService(iss.Signer, approvals, schemas, cfg.Issuer.CredentialTTL, nil, issueOpts...)
+		issuing, err := credential.NewService(iss.Signer, approvals, schemas, cfg.Issuer.CredentialTTL, nil, issueOpts...)
 		if err != nil {
 			return httpapi.API{}, err
 		}
@@ -182,8 +182,8 @@ func bootstrapRegistry(chain *blockchain.Client, iss *issuer.Issuer, txTimeout t
 //
 // issuerID is this deployment's own issuer, the only one it trusts today, so
 // it is the only issuer each policy accepts.
-func credentialTypes(issuerID string) (*credential.Schemas, []domainverification.Policy, error) {
-	schemas, err := credential.NewSchemas(kyc.Schema)
+func credentialTypes(issuerID string) (*domaincredential.Schemas, []domainverification.Policy, error) {
+	schemas, err := domaincredential.NewSchemas(kyc.Schema)
 	if err != nil {
 		return nil, nil, fmt.Errorf("credential types: %w", err)
 	}

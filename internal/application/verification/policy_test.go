@@ -1,5 +1,11 @@
 package verification
-import("context";"testing";domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification";"github.com/joshiarheinier/tokenized-credential-verifier/pkg/connector/blockchain")
+import (
+	"context"
+	"testing"
+
+	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
+	"github.com/joshiarheinier/tokenized-credential-verifier/pkg/connector/blockchain"
+)
 
 func TestVerifyAppliesPolicyPerType(t *testing.T) {
 	f := newFixture(t)
