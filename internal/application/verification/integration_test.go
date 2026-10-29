@@ -66,7 +66,7 @@ func TestVerificationAgainstRealChain(t *testing.T) {
 	}
 
 	issuing, err := credential.NewService(signer, approvals{}, schemas, time.Hour, nil,
-		domaincredential.WithBlockchainClient(client))
+		credential.WithBlockchainClient(client))
 	if err != nil {
 		t.Fatal(err)
 	}
