@@ -77,7 +77,7 @@ func WithClock(now func() time.Time) Option { return func(s *Service) { s.now = 
 // policy for; a credential of any other type is rejected as unsupported. If
 // several policies name the same type the last one wins.
 func NewService(v *credential.Verifier, policies []domainverification.Policy, opts ...Option) *Service {
-	s := &Service{verifier: v, policies: make(map[string]Policy, len(policies)), now: time.Now}
+	s := &Service{verifier: v, policies: make(map[string]domainverification.Policy, len(policies)), now: time.Now}
 	for _, p := range policies {
 		s.policies[p.CredentialType] = p
 	}

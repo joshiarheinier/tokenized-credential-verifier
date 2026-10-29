@@ -12,6 +12,7 @@ import (
 	"github.com/gagliardetto/solana-go"
 
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
+	issuance "github.com/joshiarheinier/tokenized-credential-verifier/internal/application/credential"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential/kyc"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/testutil"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/verification"
@@ -64,7 +65,7 @@ func TestVerificationAgainstRealChain(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	issuing, err := credential.NewService(signer, approvals{}, schemas, time.Hour, nil,
+	issuing, err := issuance.NewService(signer, approvals{}, schemas, time.Hour, nil,
 		credential.WithBlockchainClient(client))
 	if err != nil {
 		t.Fatal(err)
