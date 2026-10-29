@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/joshia/tokenized-credential-verifier/internal/approval"
-	"github.com/joshia/tokenized-credential-verifier/internal/credential"
-	"github.com/joshia/tokenized-credential-verifier/internal/verification"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/approval"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/credential"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/verification"
 )
 
 const maxBodyBytes = 16 * 1024

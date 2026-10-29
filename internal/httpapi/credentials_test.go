@@ -12,12 +12,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/joshia/tokenized-credential-verifier/internal/approval"
-	"github.com/joshia/tokenized-credential-verifier/internal/credential"
-	"github.com/joshia/tokenized-credential-verifier/internal/credential/kyc"
-	"github.com/joshia/tokenized-credential-verifier/internal/httpapi"
-	"github.com/joshia/tokenized-credential-verifier/internal/issuer"
-	"github.com/joshia/tokenized-credential-verifier/internal/verification"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/approval"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/credential"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/credential/kyc"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/httpapi"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/issuer"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/verification"
 )
 
 var startTime = time.Unix(1_793_000_000, 0)

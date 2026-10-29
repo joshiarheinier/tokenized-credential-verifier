@@ -1,4 +1,4 @@
-module github.com/joshia/tokenized-credential-verifier
+module github.com/joshiarheinier/tokenized-credential-verifier
 
 go 1.26
 

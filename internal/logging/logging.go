@@ -5,7 +5,7 @@ import (
 	"io"
 	"log/slog"
 
-	"github.com/joshia/tokenized-credential-verifier/internal/config"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/config"
 )
 
 // New returns a slog.Logger writing to w in the configured format and level.

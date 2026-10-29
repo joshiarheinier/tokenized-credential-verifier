@@ -19,7 +19,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/joshia/tokenized-credential-verifier/internal/credential"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/credential"
 )
 
 // Outcome is a simulated approval decision.

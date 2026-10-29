@@ -11,14 +11,14 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/joshia/tokenized-credential-verifier/internal/approval"
-	"github.com/joshia/tokenized-credential-verifier/internal/config"
-	"github.com/joshia/tokenized-credential-verifier/internal/credential"
-	"github.com/joshia/tokenized-credential-verifier/internal/credential/kyc"
-	"github.com/joshia/tokenized-credential-verifier/internal/httpapi"
-	"github.com/joshia/tokenized-credential-verifier/internal/issuer"
-	"github.com/joshia/tokenized-credential-verifier/internal/verification"
-	"github.com/joshia/tokenized-credential-verifier/pkg/connector/blockchain"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/approval"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/config"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/credential"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/credential/kyc"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/httpapi"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/issuer"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/verification"
+	"github.com/joshiarheinier/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 
 // App is the assembled API application.
@@ -92,7 +92,7 @@ func buildAPI(cfg config.Config, logger *slog.Logger) (httpapi.API, error) {
 		logger.Warn("SOLANA_RPC_URL not set: credentials are verified off-chain only, with no issuer trust or revocation check")
 	}
 
-	schemas, policies, err := credentialTypes()
+	schemas, policies, err := credentialTypes(iss.ID)
 	if err != nil {
 		return httpapi.API{}, err
 	}
@@ -177,15 +177,19 @@ func bootstrapRegistry(chain *blockchain.Client, iss *issuer.Issuer, txTimeout t
 // add its Schema here and a Policy saying which claims this application demands;
 // nothing else in the credential, verification or registry code changes. See
 // docs/credential_types.md.
-func credentialTypes() (*credential.Schemas, []verification.Policy, error) {
+//
+// issuerID is this deployment's own issuer, the only one it trusts today, so
+// it is the only issuer each policy accepts.
+func credentialTypes(issuerID string) (*credential.Schemas, []verification.Policy, error) {
 	schemas, err := credential.NewSchemas(kyc.Schema)
 	if err != nil {
 		return nil, nil, fmt.Errorf("credential types: %w", err)
 	}
 	policies := []verification.Policy{
 		{
-			CredentialType: kyc.Type,
-			Require:        []verification.Requirement{{Claim: kyc.ClaimVerified, Equals: true}},
+			CredentialType:  kyc.Type,
+			Require:         []verification.Requirement{{Claim: kyc.ClaimVerified, Equals: true}},
+			AcceptedIssuers: []string{issuerID},
 		},
 	}
 	return schemas, policies, nil

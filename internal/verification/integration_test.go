@@ -11,11 +11,11 @@ import (
 
 	"github.com/gagliardetto/solana-go"
 
-	"github.com/joshia/tokenized-credential-verifier/internal/credential"
-	"github.com/joshia/tokenized-credential-verifier/internal/credential/kyc"
-	"github.com/joshia/tokenized-credential-verifier/internal/testutil"
-	"github.com/joshia/tokenized-credential-verifier/internal/verification"
-	"github.com/joshia/tokenized-credential-verifier/pkg/connector/blockchain"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/credential"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/credential/kyc"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/testutil"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/verification"
+	"github.com/joshiarheinier/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 
 var schemas = func() *credential.Schemas {

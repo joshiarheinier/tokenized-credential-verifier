@@ -6,8 +6,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/joshia/tokenized-credential-verifier/internal/credential"
-	"github.com/joshia/tokenized-credential-verifier/pkg/connector/blockchain"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/credential"
+	"github.com/joshiarheinier/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 
 // Reason is a stable, coarse code explaining why a credential was rejected.
@@ -100,6 +100,11 @@ func (s *Service) Verify(ctx context.Context, token string) Result {
 	policy, ok := s.policies[c.CredentialType]
 	if !ok {
 		return Result{Reason: ReasonUnsupported}
+	}
+	// Cheap local checks first: who issued it, then what it says. Neither
+	// needs the chain.
+	if !policy.acceptsIssuer(c.Issuer) {
+		return Result{Reason: ReasonUntrustedIssuer}
 	}
 	if !policy.Satisfied(c.Attributes) {
 		return Result{Reason: ReasonPolicyNotSatisfied}

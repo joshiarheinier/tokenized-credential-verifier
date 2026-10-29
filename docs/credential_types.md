@@ -38,26 +38,29 @@ A `verification.Policy` says what one relying application requires of one type:
 ```go
 verification.Policy{
 	CredentialType: "Membership",
-	Require:  []verification.Requirement{{Claim: "tier", Equals: "gold"}},
-	Disclose: []string{"tier"},
+	Require:         []verification.Requirement{{Claim: "tier", Equals: "gold"}},
+	Disclose:        []string{"tier"},
+	AcceptedIssuers: []string{"did:web:club.example"},
 }
 ```
 
 - `Require`: claims that must have these exact values. A missing claim never satisfies a requirement.
 - `Disclose`: the claims returned to the application on success. Leave it nil to return all of them; set it to return only what the application needs.
+- `AcceptedIssuers`: the issuers (`iss` values) whose credentials of this type are accepted. Empty accepts any issuer the registry trusts, so set it whenever more than one issuer is trusted. A credential from an unlisted issuer is rejected as `untrusted_issuer` before the chain is consulted.
 - A credential whose type has no policy is rejected as `unsupported`: an application accepts only the types it has said it understands.
 
 ## Adding a credential type
 
 1. Define its `Schema` (the KYC one is in `internal/credential/kyc`).
-2. In `internal/app/app.go`, `credentialTypes()`: add the schema to `credential.NewSchemas(...)` and add a `Policy` for it.
+2. In `internal/app/app.go`, `credentialTypes()`: add the schema to `credential.NewSchemas(...)` and add a `Policy` for it, naming the issuers you accept for it.
 3. Issuance: whatever approves an issuance (an identity check, a purchase) produces a `credential.Approval{Subject, CredentialType, Claims}`. In development the `/v1/approvals/simulate` endpoint creates one for any registered type.
 
 No change is needed to verification, the registry or the Solana program.
 
-## Limitation: issuers are not scoped to types
+## Issuers and credential types
 
-The registry records that an issuer is trusted, not which credential types it may issue. Today the verifier trusts only this process's own issuer key, so there is no exposure. Once several issuers share a registry, a trusted ticketing issuer could sign a `KYCStatus` credential and a verifier with a KYC policy would accept it. Two ways to close that, to be decided before multi-issuer support:
+The registry records that an issuer is trusted, not which credential types it may issue. Without more, once several issuers share a registry a trusted ticketing issuer could sign a `KYCStatus` credential and a verifier would accept it.
 
-- relying applications name the issuers they accept per type (a field on `Policy`), or
-- the program records which types each issuer may issue and verification checks it on chain.
+Each application closes that for itself with `AcceptedIssuers`: for every type it accepts, it names the issuers it expects. A ticketing issuer that is not on the KYC policy's list cannot mint a KYC credential that application accepts. The default deployment lists only its own issuer.
+
+What this does not do is have the registry itself say which types an issuer is authorised for. If the registry authority should enforce that centrally, the Anchor program would record allowed types on each issuer and verification would check them on chain. That is a program change and is not implemented.

@@ -3,6 +3,8 @@
 // credential status on chain.
 package verification
 
+import "slices"
+
 // Requirement is a claim that must have an exact value.
 type Requirement struct {
 	Claim string
@@ -21,6 +23,21 @@ type Policy struct {
 	// succeeds. Nil returns every claim; use it to return only what the
 	// application needs (data minimization).
 	Disclose []string
+	// AcceptedIssuers lists the issuers (their "iss" identifiers) whose
+	// credentials of this type the application accepts. The registry says an
+	// issuer is trusted in general, not for which credential types, so this is
+	// how an application limits each type to the issuers it expects: a trusted
+	// ticketing issuer must not be able to mint a KYC credential.
+	//
+	// Empty accepts any issuer the registry trusts. Set it whenever more than
+	// one issuer is trusted.
+	AcceptedIssuers []string
+}
+
+// acceptsIssuer reports whether credentials of this type from issuer are
+// acceptable. Issuer identifiers are compared exactly.
+func (p Policy) acceptsIssuer(issuer string) bool {
+	return len(p.AcceptedIssuers) == 0 || slices.Contains(p.AcceptedIssuers, issuer)
 }
 
 // Satisfied reports whether the claims meet every requirement. A missing claim

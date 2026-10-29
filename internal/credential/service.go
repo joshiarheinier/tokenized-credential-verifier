@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/joshia/tokenized-credential-verifier/pkg/connector/blockchain"
+	"github.com/joshiarheinier/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 
 // ApprovalSource hands out issuance approvals. ConsumeApproval must return each
