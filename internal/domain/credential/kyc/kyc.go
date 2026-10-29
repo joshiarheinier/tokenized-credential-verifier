@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"regexp"
 
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/credential"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
 )
 
 const (

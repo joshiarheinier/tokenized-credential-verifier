@@ -12,12 +12,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/approval"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/credential"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/credential/kyc"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/approval"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/credential"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/verification"
+	domaincredential "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential/kyc"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/issuer"
+	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/httpapi"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/issuer"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/verification"
 )
 
 var startTime = time.Unix(1_793_000_000, 0)
@@ -25,11 +27,11 @@ var startTime = time.Unix(1_793_000_000, 0)
 // A non-KYC credential type, to show the HTTP layer is not tied to KYC.
 const membershipType = "Membership"
 
-var membershipSchema = credential.Schema{
+var membershipSchema = domaincredential.Schema{
 	Type: membershipType,
-	Fields: []credential.Field{
-		{Name: "tier", Kind: credential.String, Required: true},
-		{Name: "member_since", Kind: credential.Number},
+	Fields: []domaincredential.Field{
+		{Name: "tier", Kind: domaincredential.String, Required: true},
+		{Name: "member_since", Kind: domaincredential.Number},
 	},
 }
 
@@ -49,15 +51,15 @@ func newEnv(t *testing.T, withIssuance bool) *testEnv {
 	now := startTime
 	clock := func() time.Time { return now }
 
-	schemas, err := credential.NewSchemas(kyc.Schema, membershipSchema)
+	schemas, err := domaincredential.NewSchemas(kyc.Schema, membershipSchema)
 	if err != nil {
 		t.Fatal(err)
 	}
-	policies := []verification.Policy{
-		{CredentialType: kyc.Type, Require: []verification.Requirement{{Claim: kyc.ClaimVerified, Equals: true}}},
-		{CredentialType: membershipType, Require: []verification.Requirement{{Claim: "tier", Equals: "gold"}}, Disclose: []string{"tier"}},
+	policies := []domainverification.Policy{
+		{CredentialType: kyc.Type, Require: []domainverification.Requirement{{Claim: kyc.ClaimVerified, Equals: true}}},
+		{CredentialType: membershipType, Require: []domainverification.Requirement{{Claim: "tier", Equals: "gold"}}, Disclose: []string{"tier"}},
 	}
-	v := credential.NewVerifier(schemas, clock)
+	v := domaincredential.NewVerifier(schemas, clock)
 	v.Trust(iss.ID, iss.Signer.PublicKey())
 	api := httpapi.API{CredentialVerification: verification.NewService(v, policies)}
 	if withIssuance {
@@ -138,7 +140,7 @@ func TestVerifyRejections(t *testing.T) {
 
 	otherSeed, _ := issuer.GenerateSeed()
 	other, _ := issuer.New(e.iss.ID, otherSeed)
-	foreign, _ := other.Signer.Sign(credential.Claims{
+	foreign, _ := other.Signer.Sign(domaincredential.Claims{
 		Subject: "u", ID: "j", IssuedAt: startTime.Unix(), ExpiresAt: startTime.Add(time.Hour).Unix(),
 		CredentialType: kyc.Type,
 		Attributes:     map[string]any{"kyc_verified": true, "over_18": true, "country": "ID"},
@@ -170,7 +172,7 @@ func TestVerifyRejections(t *testing.T) {
 func TestPolicyRejectsUnverifiedClaims(t *testing.T) {
 	e := newEnv(t, false)
 	// Correctly signed and well-formed, but attests kyc_verified=false.
-	token, _ := e.iss.Signer.Sign(credential.Claims{
+	token, _ := e.iss.Signer.Sign(domaincredential.Claims{
 		Subject: "u", ID: "j", IssuedAt: startTime.Unix(), ExpiresAt: startTime.Add(time.Hour).Unix(),
 		CredentialType: kyc.Type,
 		Attributes:     map[string]any{"kyc_verified": false, "over_18": false, "country": "ID"},

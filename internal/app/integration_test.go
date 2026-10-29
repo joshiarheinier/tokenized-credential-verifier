@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/config"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/issuer"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/issuer"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/testutil"
 	"github.com/joshiarheinier/tokenized-credential-verifier/pkg/connector/blockchain"
 )

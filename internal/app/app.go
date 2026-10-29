@@ -11,13 +11,15 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/approval"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/approval"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/credential"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/verification"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/config"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/credential"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/credential/kyc"
+	domaincredential "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential/kyc"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/issuer"
+	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/httpapi"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/issuer"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/verification"
 	"github.com/joshiarheinier/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 
@@ -96,7 +98,7 @@ func buildAPI(cfg config.Config, logger *slog.Logger) (httpapi.API, error) {
 	if err != nil {
 		return httpapi.API{}, err
 	}
-	verifier := credential.NewVerifier(schemas, nil)
+	verifier := domaincredential.NewVerifier(schemas, nil)
 	verifier.Trust(iss.ID, iss.Signer.PublicKey())
 	api := httpapi.API{CredentialVerification: verification.NewService(verifier, policies, verifyOpts...)}
 
@@ -180,15 +182,15 @@ func bootstrapRegistry(chain *blockchain.Client, iss *issuer.Issuer, txTimeout t
 //
 // issuerID is this deployment's own issuer, the only one it trusts today, so
 // it is the only issuer each policy accepts.
-func credentialTypes(issuerID string) (*credential.Schemas, []verification.Policy, error) {
-	schemas, err := credential.NewSchemas(kyc.Schema)
+func credentialTypes(issuerID string) (*domaincredential.Schemas, []domainverification.Policy, error) {
+	schemas, err := domaincredential.NewSchemas(kyc.Schema)
 	if err != nil {
 		return nil, nil, fmt.Errorf("credential types: %w", err)
 	}
-	policies := []verification.Policy{
+	policies := []domainverification.Policy{
 		{
 			CredentialType:  kyc.Type,
-			Require:         []verification.Requirement{{Claim: kyc.ClaimVerified, Equals: true}},
+			Require:         []domainverification.Requirement{{Claim: kyc.ClaimVerified, Equals: true}},
 			AcceptedIssuers: []string{issuerID},
 		},
 	}
