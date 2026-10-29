@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/approval"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/approval"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/credential"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/credential/kyc"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/httpapi"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/issuer"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/issuer"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/verification"
 )
 
