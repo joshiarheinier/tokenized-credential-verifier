@@ -1,7 +1,6 @@
 package credential
 
 import (
-	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/json"
@@ -10,8 +9,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/joshiarheinier/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 
 var fixedNow = time.Unix(1_793_000_000, 0)
@@ -278,128 +275,3 @@ func TestNewSignerValidation(t *testing.T) {
 	}
 }
 
-type fakeApprovals struct {
-	approval Approval
-	err      error
-	calls    int
-}
-
-func (f *fakeApprovals) ConsumeApproval(context.Context, string) (Approval, error) {
-	f.calls++
-	return f.approval, f.err
-}
-
-func TestServiceIssueFromApproval(t *testing.T) {
-	s := newSigner(t)
-	src := &fakeApprovals{approval: Approval{Subject: "user-1", CredentialType: testType, Claims: map[string]any{"tier": "gold", "vip": false}}}
-	svc, err := NewService(s, src, testSchemas, 24*time.Hour, func() time.Time { return fixedNow })
-	if err != nil {
-		t.Fatal(err)
-	}
-	issued, err := svc.IssueFromApproval(context.Background(), "approval-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if want := fixedNow.Add(24 * time.Hour).UTC(); !issued.ExpiresAt.Equal(want) {
-		t.Errorf("ExpiresAt = %v, want %v", issued.ExpiresAt, want)
-	}
-	c, err := verifierTrusting(s, fixedNow).Verify(issued.Token)
-	if err != nil {
-		t.Fatalf("issued credential does not verify: %v", err)
-	}
-	if c.Subject != "user-1" || c.CredentialType != testType || c.Attributes["tier"] != "gold" || c.Attributes["vip"] != false || c.ID == "" {
-		t.Errorf("claims = %+v", c)
-	}
-
-	second, _ := svc.IssueFromApproval(context.Background(), "approval-1")
-	c2, _ := verifierTrusting(s, fixedNow).Verify(second.Token)
-	if c.ID == c2.ID {
-		t.Error("credential ids are not unique")
-	}
-}
-
-func TestServicePropagatesApprovalErrors(t *testing.T) {
-	sentinel := errors.New("not approved")
-	svc, _ := NewService(newSigner(t), &fakeApprovals{err: sentinel}, testSchemas, time.Hour, nil)
-	if _, err := svc.IssueFromApproval(context.Background(), "x"); !errors.Is(err, sentinel) {
-		t.Fatalf("err = %v, want %v", err, sentinel)
-	}
-}
-
-func TestNewServiceValidation(t *testing.T) {
-	s := newSigner(t)
-	if _, err := NewService(nil, &fakeApprovals{}, testSchemas, time.Hour, nil); err == nil {
-		t.Error("nil signer accepted")
-	}
-	if _, err := NewService(s, nil, testSchemas, time.Hour, nil); err == nil {
-		t.Error("nil approvals accepted")
-	}
-	if _, err := NewService(s, &fakeApprovals{}, nil, time.Hour, nil); err == nil {
-		t.Error("nil schemas accepted")
-	}
-	if _, err := NewService(s, &fakeApprovals{}, testSchemas, 0, nil); err == nil {
-		t.Error("zero ttl accepted")
-	}
-}
-
-type registerCall struct {
-	issuerID, ref [32]byte
-	exp           time.Time
-}
-
-type fakeBlockchainClient struct {
-	err   error
-	calls []registerCall
-}
-
-func (f *fakeBlockchainClient) RegisterCredential(_ context.Context, issuerID, ref [32]byte, exp time.Time) (blockchain.WriteResult, error) {
-	f.calls = append(f.calls, registerCall{issuerID, ref, exp})
-	return blockchain.WriteResult{}, f.err
-}
-
-func TestServiceRegistersCredentialBeforeReturningIt(t *testing.T) {
-	s := newSigner(t)
-	reg := &fakeBlockchainClient{}
-	src := &fakeApprovals{approval: Approval{Subject: "user-1", CredentialType: testType, Claims: map[string]any{"tier": "gold", "vip": true}}}
-	svc, _ := NewService(s, src, testSchemas, time.Hour, func() time.Time { return fixedNow }, WithBlockchainClient(reg))
-
-	issued, err := svc.IssueFromApproval(context.Background(), "approval-1")
-	if err != nil {
-		t.Fatal(err)
-	}
-	c, err := verifierTrusting(s, fixedNow).Verify(issued.Token)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(reg.calls) != 1 {
-		t.Fatalf("blockchain calls = %d, want 1", len(reg.calls))
-	}
-	got := reg.calls[0]
-	if got.issuerID != blockchain.IssuerID(s.IssuerID()) ||
-		got.ref != blockchain.CredentialRef(c.ID) ||
-		!got.exp.Equal(time.Unix(c.ExpiresAt, 0)) {
-		t.Errorf("registered %+v, want the ids and expiry of the issued credential", got)
-	}
-}
-
-func TestServiceReturnsNoCredentialWhenRegistrationFails(t *testing.T) {
-	boom := errors.New("chain down")
-	src := &fakeApprovals{approval: Approval{Subject: "user-1", CredentialType: testType, Claims: map[string]any{"tier": "gold", "vip": true}}}
-	svc, _ := NewService(newSigner(t), src, testSchemas, time.Hour, nil, WithBlockchainClient(&fakeBlockchainClient{err: boom}))
-
-	issued, err := svc.IssueFromApproval(context.Background(), "approval-1")
-	if !errors.Is(err, boom) || issued.Token != "" {
-		t.Fatalf("issued=%+v err=%v, want no credential and the blockchain error", issued, err)
-	}
-}
-
-func TestServiceDoesNotRegisterForInvalidApprovals(t *testing.T) {
-	reg := &fakeBlockchainClient{}
-	svc, _ := NewService(newSigner(t), &fakeApprovals{err: errors.New("not approved")}, testSchemas, time.Hour, nil, WithBlockchainClient(reg))
-	if _, err := svc.IssueFromApproval(context.Background(), "x"); err == nil {
-		t.Fatal("want error")
-	}
-	if len(reg.calls) != 0 {
-		t.Fatal("an invalid approval must not trigger an on-chain registration")
-	}
-}

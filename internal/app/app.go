@@ -14,6 +14,7 @@ import (
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/approval"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/config"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
+	issuance "github.com/joshiarheinier/tokenized-credential-verifier/internal/application/credential"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential/kyc"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/httpapi"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/issuer"
@@ -66,7 +67,7 @@ func buildAPI(cfg config.Config, logger *slog.Logger) (httpapi.API, error) {
 	var (
 		chain      *blockchain.Client
 		verifyOpts []verification.Option
-		issueOpts  []credential.ServiceOption
+		issueOpts  []issuance.ServiceOption
 	)
 	if cfg.Solana.RPCURL != "" {
 		if chain, err = blockchain.NewClient(blockchain.Config{
@@ -81,7 +82,7 @@ func buildAPI(cfg config.Config, logger *slog.Logger) (httpapi.API, error) {
 			return httpapi.API{}, err
 		}
 		verifyOpts = append(verifyOpts, verification.WithBlockchainClient(chain))
-		issueOpts = append(issueOpts, credential.WithBlockchainClient(chain))
+		issueOpts = append(issueOpts, issuance.WithBlockchainClient(chain))
 		logger.Info("on-chain registry enabled", "rpc_url", cfg.Solana.RPCURL, "program_id", cfg.Solana.ProgramID, "commitment", cfg.Solana.Commitment)
 		if cfg.Solana.Bootstrap {
 			if err := bootstrapRegistry(chain, iss, cfg.Solana.TxTimeout, logger); err != nil {
@@ -103,7 +104,7 @@ func buildAPI(cfg config.Config, logger *slog.Logger) (httpapi.API, error) {
 	if cfg.Simulation.Enabled {
 		logger.Warn("simulated approvals are enabled: for local development only")
 		approvals := approval.NewService(schemas)
-		issuing, err := credential.NewService(iss.Signer, approvals, schemas, cfg.Issuer.CredentialTTL, nil, issueOpts...)
+		issuing, err := issuance.NewService(iss.Signer, approvals, schemas, cfg.Issuer.CredentialTTL, nil, issueOpts...)
 		if err != nil {
 			return httpapi.API{}, err
 		}

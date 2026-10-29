@@ -3,17 +3,19 @@ package credential
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"time"
 
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
 	"github.com/joshiarheinier/tokenized-credential-verifier/pkg/connector/blockchain"
 )
 
 // ApprovalSource hands out issuance approvals. ConsumeApproval must return each
 // approval at most once.
 type ApprovalSource interface {
-	ConsumeApproval(ctx context.Context, id string) (Approval, error)
+	ConsumeApproval(ctx context.Context, id string) (credential.Approval, error)
 }
 
 // Issued is a newly issued credential.
@@ -32,9 +34,9 @@ type BlockchainClient interface {
 
 // Service issues credentials for approvals from an ApprovalSource.
 type Service struct {
-	signer    *Signer
+	signer    *credential.Signer
 	approvals ApprovalSource
-	schemas   *Schemas
+	schemas   *credential.Schemas
 	ttl       time.Duration
 	now       func() time.Time
 	chain     BlockchainClient
@@ -53,7 +55,7 @@ func WithBlockchainClient(c BlockchainClient) ServiceOption {
 
 // NewService returns an issuing Service that can issue the credential types in
 // schemas. now may be nil to use the wall clock.
-func NewService(signer *Signer, approvals ApprovalSource, schemas *Schemas, ttl time.Duration, now func() time.Time, opts ...ServiceOption) (*Service, error) {
+func NewService(signer *credential.Signer, approvals ApprovalSource, schemas *credential.Schemas, ttl time.Duration, now func() time.Time, opts ...ServiceOption) (*Service, error) {
 	if signer == nil || approvals == nil || schemas == nil {
 		return nil, errors.New("credential: signer, approval source and schemas are required")
 	}
@@ -102,7 +104,7 @@ func (s *Service) IssueFromApproval(ctx context.Context, approvalID string) (Iss
 			return Issued{}, fmt.Errorf("credential: register: %w", err)
 		}
 	}
-	token, err := s.signer.Sign(Claims{
+	token, err := s.signer.Sign(credential.Claims{
 		Subject:        a.Subject,
 		ID:             id,
 		IssuedAt:       now.Unix(),
@@ -123,5 +125,5 @@ func randomID() (string, error) {
 	if _, err := rand.Read(b[:]); err != nil {
 		return "", fmt.Errorf("credential: generate id: %w", err)
 	}
-	return b64.EncodeToString(b[:]), nil
+	return base64.RawURLEncoding.EncodeToString(b[:]), nil
 }

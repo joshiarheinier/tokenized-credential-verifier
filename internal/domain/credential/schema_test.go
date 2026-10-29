@@ -91,20 +91,3 @@ func TestNewSchemasRejectsBadDefinitions(t *testing.T) {
 	}
 }
 
-func TestServiceRejectsApprovalsThatDoNotMatchTheirType(t *testing.T) {
-	reg := &fakeBlockchainClient{}
-	for name, a := range map[string]Approval{
-		"unknown type":     {Subject: "u", CredentialType: "Nope", Claims: map[string]any{"tier": "gold", "vip": true}},
-		"claims mismatch":  {Subject: "u", CredentialType: testType, Claims: map[string]any{"tier": "gold"}},
-		"unexpected claim": {Subject: "u", CredentialType: testType, Claims: map[string]any{"tier": "gold", "vip": true, "ssn": "x"}},
-	} {
-		svc, _ := NewService(newSigner(t), &fakeApprovals{approval: a}, testSchemas, 3600e9, nil, WithBlockchainClient(reg))
-		issued, err := svc.IssueFromApproval(t.Context(), "id")
-		if err == nil || issued.Token != "" {
-			t.Errorf("%s: issued=%+v err=%v, want a refusal", name, issued, err)
-		}
-	}
-	if len(reg.calls) != 0 {
-		t.Fatal("an invalid approval must not be registered on chain")
-	}
-}

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/approval"
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/credential"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/verification"
 )
 
