@@ -1,7 +1,13 @@
-// Package simulation stands in for an issuer's real approval process (an
-// identity check, a ticket purchase, a membership signup) during local
-// development. It must not be wired up as a production approval mechanism.
-package simulation
+// Package approval holds an issuer's decisions to issue credentials. A decision
+// (approved or rejected, for a subject and credential type) is recorded once and,
+// if approved, consumed exactly once when the credential is issued.
+//
+// The decisions themselves come from outside: in production from the issuer's
+// own process (an identity check, a ticket purchase, a membership signup). This
+// in-memory Service is the development implementation, and the dev-only
+// /v1/approvals/simulate endpoint is what lets a caller declare a decision
+// without any real check. That endpoint must never be exposed in production.
+package approval
 
 import (
 	"context"
@@ -27,13 +33,13 @@ const (
 const maxSubjectLen = 256
 
 var (
-	ErrInvalidRequest = errors.New("simulation: invalid request")
-	ErrNotFound       = errors.New("simulation: approval not found")
-	ErrNotApproved    = errors.New("simulation: approval was not approved")
-	ErrAlreadyUsed    = errors.New("simulation: approval already used")
+	ErrInvalidRequest = errors.New("approval: invalid request")
+	ErrNotFound       = errors.New("approval: not found")
+	ErrNotApproved    = errors.New("approval: was not approved")
+	ErrAlreadyUsed    = errors.New("approval: already used")
 )
 
-// Request describes the simulated subject and the decision to produce. For an
+// Request describes the subject and the decision to record. For an
 // approved outcome CredentialType must be a known type and Claims must match its
 // schema. Both are ignored for rejected outcomes.
 type Request struct {
@@ -43,7 +49,7 @@ type Request struct {
 	Claims         map[string]any
 }
 
-// Result is a stored simulated decision.
+// Result is a stored decision.
 type Result struct {
 	ID             string
 	Subject        string
@@ -53,7 +59,7 @@ type Result struct {
 	used           bool
 }
 
-// Service stores simulated approvals in memory.
+// Service stores approval decisions in memory.
 type Service struct {
 	schemas *credential.Schemas
 
@@ -66,8 +72,8 @@ func NewService(schemas *credential.Schemas) *Service {
 	return &Service{schemas: schemas, results: make(map[string]*Result)}
 }
 
-// Simulate validates the request and records a decision.
-func (s *Service) Simulate(_ context.Context, req Request) (Result, error) {
+// Record validates the request and records a decision.
+func (s *Service) Record(_ context.Context, req Request) (Result, error) {
 	subject := strings.TrimSpace(req.Subject)
 	if subject == "" || len(subject) > maxSubjectLen {
 		return Result{}, fmt.Errorf("%w: subject must be 1-%d characters", ErrInvalidRequest, maxSubjectLen)
@@ -87,7 +93,7 @@ func (s *Service) Simulate(_ context.Context, req Request) (Result, error) {
 
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		return Result{}, fmt.Errorf("simulation: generate id: %w", err)
+		return Result{}, fmt.Errorf("approval: generate id: %w", err)
 	}
 	r.ID = base64.RawURLEncoding.EncodeToString(b[:])
 
@@ -97,7 +103,7 @@ func (s *Service) Simulate(_ context.Context, req Request) (Result, error) {
 	return r, nil
 }
 
-// ConsumeApproval returns the approval for a simulated decision exactly once.
+// ConsumeApproval returns the approval for a recorded decision exactly once.
 func (s *Service) ConsumeApproval(_ context.Context, id string) (credential.Approval, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

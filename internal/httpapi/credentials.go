@@ -9,17 +9,18 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/joshia/tokenized-credential-verifier/internal/approval"
 	"github.com/joshia/tokenized-credential-verifier/internal/credential"
-	"github.com/joshia/tokenized-credential-verifier/internal/simulation"
 	"github.com/joshia/tokenized-credential-verifier/internal/verification"
 )
 
 const maxBodyBytes = 16 * 1024
 
-// ApprovalSimulationService records simulated issuer approvals. Development
-// only.
+// ApprovalSimulationService backs the dev-only endpoint that lets a caller
+// declare an issuer approval without any real check. It records the decision
+// through the approval package.
 type ApprovalSimulationService interface {
-	Simulate(ctx context.Context, req simulation.Request) (simulation.Result, error)
+	Record(ctx context.Context, req approval.Request) (approval.Result, error)
 }
 
 // CredentialIssuanceService issues credentials for approvals.
@@ -77,15 +78,15 @@ func decodeBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 }
 
 type simulateRequest struct {
-	Subject        string             `json:"subject"`
-	CredentialType string             `json:"credential_type"`
-	Outcome        simulation.Outcome `json:"outcome"`
-	Claims         map[string]any     `json:"claims"`
+	Subject        string           `json:"subject"`
+	CredentialType string           `json:"credential_type"`
+	Outcome        approval.Outcome `json:"outcome"`
+	Claims         map[string]any   `json:"claims"`
 }
 
 type simulateResponse struct {
-	ApprovalID string             `json:"approval_id"`
-	Outcome    simulation.Outcome `json:"outcome"`
+	ApprovalID string           `json:"approval_id"`
+	Outcome    approval.Outcome `json:"outcome"`
 }
 
 func (h *v1Handlers) simulate(w http.ResponseWriter, r *http.Request) {
@@ -93,11 +94,11 @@ func (h *v1Handlers) simulate(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &req) {
 		return
 	}
-	res, err := h.api.ApprovalSimulation.Simulate(r.Context(), simulation.Request{
+	res, err := h.api.ApprovalSimulation.Record(r.Context(), approval.Request{
 		Subject: req.Subject, CredentialType: req.CredentialType, Outcome: req.Outcome, Claims: req.Claims,
 	})
 	if err != nil {
-		if errors.Is(err, simulation.ErrInvalidRequest) {
+		if errors.Is(err, approval.ErrInvalidRequest) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -129,11 +130,11 @@ func (h *v1Handlers) issue(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case err == nil:
 		writeJSON(w, http.StatusCreated, issueResponse{Credential: issued.Token, ExpiresAt: issued.ExpiresAt})
-	case errors.Is(err, simulation.ErrNotFound):
+	case errors.Is(err, approval.ErrNotFound):
 		writeError(w, http.StatusNotFound, "approval not found")
-	case errors.Is(err, simulation.ErrNotApproved):
+	case errors.Is(err, approval.ErrNotApproved):
 		writeError(w, http.StatusUnprocessableEntity, "approval was not approved")
-	case errors.Is(err, simulation.ErrAlreadyUsed):
+	case errors.Is(err, approval.ErrAlreadyUsed):
 		writeError(w, http.StatusConflict, "a credential was already issued for this approval")
 	default:
 		h.internalError(w, r, err)

@@ -1,4 +1,4 @@
-package simulation
+package approval
 
 import (
 	"context"
@@ -32,7 +32,7 @@ func approved(claims map[string]any) Request {
 
 func TestConsumeApprovalOnlyOnceUnderConcurrency(t *testing.T) {
 	s := NewService(testSchemas(t))
-	res, err := s.Simulate(context.Background(), approved(map[string]any{"tier": "gold"}))
+	res, err := s.Record(context.Background(), approved(map[string]any{"tier": "gold"}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +59,7 @@ func TestConsumeApprovalOnlyOnceUnderConcurrency(t *testing.T) {
 
 func TestRejectedResultNeverYieldsApproval(t *testing.T) {
 	s := NewService(testSchemas(t))
-	res, _ := s.Simulate(context.Background(), Request{Subject: "u", Outcome: OutcomeRejected})
+	res, _ := s.Record(context.Background(), Request{Subject: "u", Outcome: OutcomeRejected})
 	if _, err := s.ConsumeApproval(context.Background(), res.ID); !errors.Is(err, ErrNotApproved) {
 		t.Fatalf("err = %v, want ErrNotApproved", err)
 	}
@@ -76,7 +76,7 @@ func TestApprovedRequestsAreValidatedAgainstTheTypeSchema(t *testing.T) {
 		"unknown outcome":  {Subject: "u", CredentialType: testType, Outcome: "maybe"},
 	}
 	for name, req := range cases {
-		if _, err := s.Simulate(context.Background(), req); !errors.Is(err, ErrInvalidRequest) {
+		if _, err := s.Record(context.Background(), req); !errors.Is(err, ErrInvalidRequest) {
 			t.Errorf("%s: err = %v, want ErrInvalidRequest", name, err)
 		}
 	}
@@ -85,7 +85,7 @@ func TestApprovedRequestsAreValidatedAgainstTheTypeSchema(t *testing.T) {
 func TestApprovalCarriesTypeAndClaims(t *testing.T) {
 	s := NewService(testSchemas(t))
 	claims := map[string]any{"tier": "gold"}
-	res, err := s.Simulate(context.Background(), approved(claims))
+	res, err := s.Record(context.Background(), approved(claims))
 	if err != nil {
 		t.Fatal(err)
 	}

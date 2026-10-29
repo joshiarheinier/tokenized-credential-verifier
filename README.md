@@ -173,7 +173,7 @@ internal/logging/     slog logger construction
 internal/credential/  Credential model, schemas, Ed25519 signer, verifier, issuing service
 internal/credential/kyc/ The KYCStatus credential type (first registered type)
 internal/issuer/      Issuer identity and signing-key loading
-internal/simulation/  Simulated issuer approvals (dev only, in memory)
+internal/approval/    Issuer approval decisions: recorded once, consumed once at issuance (in memory)
 internal/verification/ Acceptance policy, on-chain checks and coarse rejection reasons
 pkg/connector/blockchain/ Connector to the Solana registry program (only package importing the SDK; no dependency on internal/)
 contracts/credential-registry/ Anchor program (trust registry)

@@ -11,12 +11,12 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/joshia/tokenized-credential-verifier/internal/approval"
 	"github.com/joshia/tokenized-credential-verifier/internal/config"
 	"github.com/joshia/tokenized-credential-verifier/internal/credential"
 	"github.com/joshia/tokenized-credential-verifier/internal/credential/kyc"
 	"github.com/joshia/tokenized-credential-verifier/internal/httpapi"
 	"github.com/joshia/tokenized-credential-verifier/internal/issuer"
-	"github.com/joshia/tokenized-credential-verifier/internal/simulation"
 	"github.com/joshia/tokenized-credential-verifier/internal/verification"
 	"github.com/joshia/tokenized-credential-verifier/pkg/connector/blockchain"
 )
@@ -102,7 +102,7 @@ func buildAPI(cfg config.Config, logger *slog.Logger) (httpapi.API, error) {
 
 	if cfg.Simulation.Enabled {
 		logger.Warn("simulated approvals are enabled: for local development only")
-		approvals := simulation.NewService(schemas)
+		approvals := approval.NewService(schemas)
 		issuing, err := credential.NewService(iss.Signer, approvals, schemas, cfg.Issuer.CredentialTTL, nil, issueOpts...)
 		if err != nil {
 			return httpapi.API{}, err

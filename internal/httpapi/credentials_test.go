@@ -12,11 +12,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/joshia/tokenized-credential-verifier/internal/approval"
 	"github.com/joshia/tokenized-credential-verifier/internal/credential"
 	"github.com/joshia/tokenized-credential-verifier/internal/credential/kyc"
 	"github.com/joshia/tokenized-credential-verifier/internal/httpapi"
 	"github.com/joshia/tokenized-credential-verifier/internal/issuer"
-	"github.com/joshia/tokenized-credential-verifier/internal/simulation"
 	"github.com/joshia/tokenized-credential-verifier/internal/verification"
 )
 
@@ -61,7 +61,7 @@ func newEnv(t *testing.T, withIssuance bool) *testEnv {
 	v.Trust(iss.ID, iss.Signer.PublicKey())
 	api := httpapi.API{CredentialVerification: verification.NewService(v, policies)}
 	if withIssuance {
-		approvals := simulation.NewService(schemas)
+		approvals := approval.NewService(schemas)
 		svc, err := credential.NewService(iss.Signer, approvals, schemas, time.Hour, clock)
 		if err != nil {
 			t.Fatal(err)
