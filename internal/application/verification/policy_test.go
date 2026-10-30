@@ -4,7 +4,6 @@ import (
 	"context"
 	"testing"
 
-	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/registry"
 	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
 )
 
@@ -61,20 +60,5 @@ func TestIssuerAllowListIsPerType(t *testing.T) {
 
 	if res := verify(base); !res.Valid {
 		t.Fatalf("Valid=false (%s), want an empty list to accept any trusted issuer", res.Reason)
-	}
-}
-
-// The allow-list is a local check: an unlisted issuer is turned away without
-// the chain being consulted, so it cannot be mistaken for an outage.
-func TestIssuerAllowListIsCheckedBeforeTheChain(t *testing.T) {
-	f := newFixture(t)
-	f.reg.issuerErr = registry.ErrUnavailable
-	svc := NewService(credentialVerifier(t, f), []domainverification.Policy{{
-		CredentialType:  testType,
-		AcceptedIssuers: []string{"did:example:someone-else"},
-	}}, WithBlockchainClient(f.reg))
-
-	if res := svc.Verify(context.Background(), f.token); res.Reason != ReasonUntrustedIssuer {
-		t.Fatalf("Reason = %q, want untrusted_issuer, not verification_unavailable", res.Reason)
 	}
 }

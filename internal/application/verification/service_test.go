@@ -89,8 +89,8 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// No trusted keys of its own: the signing key must come from the registry.
 	v := credential.NewVerifier(testSchemas, func() time.Time { return now })
-	v.Trust(issuerName, pub)
 
 	issuerID := registry.IssuerID(issuerName)
 	reg := &fakeBlockchainClient{
@@ -172,9 +172,8 @@ func TestVerificationFailsClosedWhenChainCannotBeRead(t *testing.T) {
 	}
 }
 
-func TestLocalFailuresDoNotConsultTheChain(t *testing.T) {
+func TestInvalidSignatureIsRejected(t *testing.T) {
 	f := newFixture(t)
-	f.reg.issuerErr = registry.ErrUnavailable   // would turn into "unavailable" if consulted
 	f.token = f.token[:len(f.token)-4] + "AAAA" // corrupt the signature
 	if res := f.verify(); res.Reason != ReasonInvalidSignature {
 		t.Fatalf("Reason = %q, want invalid_signature", res.Reason)

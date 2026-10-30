@@ -2,7 +2,6 @@ package verification
 
 import (
 	"context"
-	"crypto/ed25519"
 	"errors"
 	"time"
 
@@ -91,13 +90,14 @@ func NewService(v *credential.Verifier, policies []domainverification.Policy, op
 // Verify returns a Result describing whether token is acceptable. Claims are
 // only populated for valid credentials.
 //
-// With a BlockchainClient configured, verification fails closed: if the chain cannot
-// be read, or returns something unusable, the result is ReasonUnavailable and
-// the credential is not accepted.
+// With a BlockchainClient configured, the signature is checked with the key the
+// registry holds for the issuer, and verification fails closed: if the chain
+// cannot be read, or returns something unusable, the result is ReasonUnavailable
+// and the credential is not accepted.
 func (s *Service) Verify(ctx context.Context, token string) Result {
-	c, key, err := s.verifier.VerifyWithKey(token)
-	if err != nil {
-		return Result{Reason: reasonFor(err)}
+	c, reason := s.authenticate(ctx, token)
+	if reason != "" {
+		return Result{Reason: reason}
 	}
 	policy, ok := s.policies[c.CredentialType]
 	if !ok {
@@ -112,7 +112,7 @@ func (s *Service) Verify(ctx context.Context, token string) Result {
 		return Result{Reason: ReasonPolicyNotSatisfied}
 	}
 	if s.chain != nil {
-		if reason := s.checkOnChain(ctx, c, key); reason != "" {
+		if reason := s.checkOnChain(ctx, c); reason != "" {
 			return Result{Reason: reason}
 		}
 	}
@@ -125,23 +125,44 @@ func (s *Service) Verify(ctx context.Context, token string) Result {
 	}
 }
 
-// checkOnChain returns the rejection reason, or "" if the chain confirms the
-// issuer is trusted and the credential is registered, active and unexpired.
-func (s *Service) checkOnChain(ctx context.Context, c *credential.Claims, signedWith ed25519.PublicKey) Reason {
-	issuerID := registry.IssuerID(c.Issuer)
-	issuer, err := s.chain.GetIssuer(ctx, issuerID)
-	switch {
-	case errors.Is(err, registry.ErrNotFound):
-		return ReasonUntrustedIssuer
-	case err != nil:
-		return ReasonUnavailable
-	}
-	// The key that signed the credential must be the one the registry
-	// attests to, not merely one we happen to be configured with.
-	if !issuer.Active || !signedWith.Equal(issuer.SigningKey) {
-		return ReasonUntrustedIssuer
+// authenticate verifies the signature and returns the claims, or the rejection
+// reason. With a BlockchainClient the key must be the one registered on chain
+// for an active issuer; otherwise it is one of the verifier's trusted keys.
+func (s *Service) authenticate(ctx context.Context, token string) (*credential.Claims, Reason) {
+	if s.chain == nil {
+		c, err := s.verifier.Verify(token)
+		if err != nil {
+			return nil, reasonFor(err)
+		}
+		return c, ""
 	}
 
+	name, err := credential.UnverifiedIssuer(token)
+	if err != nil {
+		return nil, ReasonMalformed
+	}
+
+	issuer, err := s.chain.GetIssuer(ctx, registry.IssuerID(name))
+	switch {
+	case errors.Is(err, registry.ErrNotFound):
+		return nil, ReasonUntrustedIssuer
+	case err != nil:
+		return nil, ReasonUnavailable
+	case !issuer.Active:
+		return nil, ReasonUntrustedIssuer
+	}
+	c, err := s.verifier.VerifyIssuedBy(token, name, issuer.SigningKey)
+	if err != nil {
+		return nil, reasonFor(err)
+	}
+
+	return c, ""
+}
+
+// checkOnChain returns the rejection reason, or "" if the chain confirms the
+// credential is registered by its issuer, active and unexpired.
+func (s *Service) checkOnChain(ctx context.Context, c *credential.Claims) Reason {
+	issuerID := registry.IssuerID(c.Issuer)
 	status, err := s.chain.GetCredentialStatus(ctx, registry.CredentialRef(c.ID))
 	switch {
 	case errors.Is(err, registry.ErrNotFound):

@@ -113,6 +113,30 @@ func (v *Verifier) VerifyWithKey(token string) (*Claims, ed25519.PublicKey, erro
 	return &c, tk.key, nil
 }
 
+// VerifyIssuedBy verifies a credential that must come from issuer and be
+// signed with key, regardless of the keys added with Trust.
+func (v *Verifier) VerifyIssuedBy(token, issuer string, key ed25519.PublicKey) (*Claims, error) {
+	verifier := &Verifier{keys: map[string]trustedKey{KeyID(key): {issuer, key}}, schemas: v.schemas, now: v.now}
+	return verifier.Verify(token)
+}
+
+// UnverifiedIssuer returns the issuer a credential claims, without verifying
+// it. It only tells the caller whose key to verify with.
+func UnverifiedIssuer(token string) (string, error) {
+	parts := strings.Split(token, ".")
+	if len(token) > MaxTokenSize || len(parts) != 3 {
+		return "", ErrMalformed
+	}
+	raw, err := b64.DecodeString(parts[1])
+	var c struct {
+		Issuer string `json:"iss"`
+	}
+	if err != nil || json.Unmarshal(raw, &c) != nil {
+		return "", ErrMalformed
+	}
+	return c.Issuer, nil
+}
+
 // decodeStrict unmarshals a single JSON object, rejecting unknown fields and
 // trailing data.
 func decodeStrict(data []byte, dst any) error {
