@@ -77,13 +77,8 @@ type app struct {
 
 func (a *app) routes() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /{$}", a.index)
 	mux.HandleFunc("POST /access", a.access)
 	return mux
-}
-
-func (a *app) index(w http.ResponseWriter, _ *http.Request) {
-	fmt.Fprintln(w, "demo-dapp: POST /access with {\"credential\": \"<compact credential>\"} to enter.")
 }
 
 type accessRequest struct {

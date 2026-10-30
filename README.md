@@ -196,7 +196,7 @@ internal/
   config/                    Environment-variable configuration with validation
   testutil/                  Helpers for integration tests (build tag `integration`)
 demo-wallet/                 Demo credential wallet: a CLI, and a browser wallet using Phantom (`serve`); separate module, talks to the backend over HTTP
-demo-dapp/                   Demo relying application (CLI + HTTP); separate module, asks the verifier API
+demo-dapp/                   Demo relying application: a members-only page that asks the wallet to prove one claim (and a CLI prompt); separate module, asks the verifier API
 contracts/credential-registry/   Anchor program: the on-chain trust registry
 scripts/                     Local validator and integration-test runners (WSL)
 docs/                        Design and reference documents

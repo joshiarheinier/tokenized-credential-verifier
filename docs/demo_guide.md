@@ -153,9 +153,9 @@ configured, and they have no authentication yet.
 
 A web wallet that keeps credentials in your browser and uses your Phantom account
 as the holder key. Phantom only signs a short text; it holds none of the
-credentials, sends no transaction and needs no funds or network setup. The
-application page that asks for a credential comes later; for now you play the
-application yourself with one `curl`.
+credentials, sends no transaction and needs no funds or network setup. The demo
+application is a members-only page that asks the wallet to prove one claim, being
+over 18, and learns nothing else.
 
 **Setup.** Install the Phantom browser extension and create or pick any test
 account. Add the wallet's origin to the backend's `.local/demo.env` and restart the
@@ -165,10 +165,11 @@ backend (use `localhost`, not `127.0.0.1`, in the browser):
 CORS_ALLOWED_ORIGINS=http://localhost:9091
 ```
 
-Then start the wallet:
+Then start the wallet and the application, each in its own terminal:
 
 ```bash
-cd demo-wallet && go run . serve      # http://127.0.0.1:9091
+cd demo-wallet && go run . serve      # http://localhost:9091
+cd demo-dapp && go run .              # http://localhost:9090
 ```
 
 The wallet talks to `http://127.0.0.1:8080` by default (`-verifier` and
@@ -179,7 +180,21 @@ The wallet talks to `http://127.0.0.1:8080` by default (`-verifier` and
 *bound to this account*: its subject is your Phantom address. You can open its
 claims and delete it.
 
-**2. Pose a challenge, as an application would.** In Git Bash:
+**2. Verify on the application's page.** Open <http://localhost:9090> and press
+*Verify with wallet*. The application poses a challenge for `over_18` and sends
+you to your wallet. The wallet shows who is asking (`http://localhost:9090`),
+which claim, and what your credential would share (`over_18 = true`). Press
+*Approve and sign with Phantom*: Phantom shows the exact text being signed, which
+is also your consent record. The wallet says *Verified* and you follow its link
+back to the application, which opens the members area. It lists what it
+learned, only `over_18`: not your country, not the KYC flag. Press *Sign out*
+to close the area again.
+
+The dApp prompt in its terminal shows each step as it happens (`asked a wallet
+to prove over_18`, `wallet answered: over_18 = true`).
+
+**Playing the application yourself, with curl.** The same flow without the page.
+In Git Bash:
 
 ```bash
 curl -X POST http://127.0.0.1:8080/v1/challenges -H "Content-Type: application/json" \
@@ -189,14 +204,8 @@ curl -X POST http://127.0.0.1:8080/v1/challenges -H "Content-Type: application/j
 (In Windows PowerShell: `Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8080/v1/challenges -ContentType application/json -Body '{"audience":"http://localhost:9090","credential_type":"KYCStatus","claims":["over_18"]}'`.)
 Keep the `challenge_id` and `result_secret` from the reply.
 
-**3. Answer it in the wallet.** Open
-`http://localhost:9091/present?challenge=<challenge_id>`. The page shows who is
-asking (`http://localhost:9090`), which claim, and what your credential would
-share (`over_18 = true`). Press *Approve and sign with Phantom*: Phantom shows
-the exact text being signed, which is also your consent record. The wallet then
-says *Verified*.
-
-**4. Read the verdict, as the application.**
+Open `http://localhost:9091/present?challenge=<challenge_id>` and answer it in the
+wallet as above. Then read the verdict, as the application:
 
 ```bash
 curl http://127.0.0.1:8080/v1/challenges/<challenge_id>/result -H "Authorization: Bearer <result_secret>"
@@ -204,8 +213,12 @@ curl http://127.0.0.1:8080/v1/challenges/<challenge_id>/result -H "Authorization
 
 It holds only `over_18`, not your country or the KYC flag.
 
-**Things to try.** Reload the consent page after answering: *already answered*
-(a challenge works once). Switch to another Phantom account and open a fresh
+**Things to try.** On the application's page, press *Verify with wallet* and
+*Decline* in the wallet: the application says it is still waiting and lets
+nobody in. Request a credential with *Over 18* unticked and verify with it: the
+application learns `over_18 = false` and refuses entry. Stop the backend and press
+*Verify with wallet*: *cannot verify right now*, and nobody is let in. Reload the
+consent page after answering: *already answered* (a challenge works once). Switch to another Phantom account and open a fresh
 challenge: the credential is listed as *not usable* because it was issued to a
 different account. Decline in Phantom: nothing is sent. Press *Revoke (demo)*
 on a credential: the issuer revokes it on chain (`/credentials` on the inspector
@@ -214,7 +227,10 @@ verifier. *Remove from wallet* is different: it only deletes this wallet's copy
 and does not revoke anything, so the credential stays valid on chain. Revoking
 needs the credential, so revoke before you remove it.
 
-**If something does not work.** *Could not reach http://127.0.0.1:8080 … CORS*:
+**If something does not work.** On the application's page, *This page only works
+in the browser that started the verification*: open the application as
+`http://localhost:9090` (it redirects `127.0.0.1` there) and start again from its
+home page. *Could not reach http://127.0.0.1:8080 … CORS*:
 the backend does not list the wallet's origin in `CORS_ALLOWED_ORIGINS`.
 *Phantom was not found*: reload after installing, and open the wallet as
 `http://localhost:9091`. The wallet serves a strict Content-Security-Policy; if
