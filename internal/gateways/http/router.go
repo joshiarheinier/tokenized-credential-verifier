@@ -40,12 +40,20 @@ func NewRouter(logger *slog.Logger, api API, checks ...ReadinessCheck) http.Hand
 		mux.HandleFunc("POST /v1/issuer/reactivate", v1.setIssuerActive(true))
 	}
 
+	// Challenge-response protocol: challenges, responses and results
+	if api.Challenges != nil {
+		mux.HandleFunc("POST /v1/challenges", v1.createChallenge)
+		mux.HandleFunc("GET /v1/challenges/{id}", v1.getChallenge)
+		mux.HandleFunc("POST /v1/challenges/{id}/response", v1.respondChallenge)
+		mux.HandleFunc("GET /v1/challenges/{id}/result", v1.challengeResult)
+	}
+
 	// Verification
 	if api.CredentialVerification != nil {
 		mux.HandleFunc("POST /v1/credentials/verify", v1.verify)
 	}
 
-	return recoverPanics(logger, logRequests(logger, mux))
+	return recoverPanics(logger, logRequests(logger, cors(api.AllowedOrigins, mux)))
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

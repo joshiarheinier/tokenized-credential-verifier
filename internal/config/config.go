@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -27,6 +28,15 @@ type Config struct {
 	Issuer     IssuerConfig
 	Simulation SimulationConfig
 	Solana     SolanaConfig
+	// Challenge configures the challenge-response protocol.
+	Challenge ChallengeConfig
+}
+
+// ChallengeConfig configures the challenge-response protocol
+// (docs/challenge_response_protocol.md).
+type ChallengeConfig struct {
+	// TTL is how long a challenge can be answered.
+	TTL time.Duration
 }
 
 // IssuerConfig identifies the credential issuer and its signing key.
@@ -53,8 +63,10 @@ type SimulationConfig struct {
 type SolanaConfig struct {
 	RPCURL    string
 	ProgramID string
+
 	// Commitment is "confirmed" or "finalized".
 	Commitment string
+
 	// RegistryAuthorityKeypair and IssuerAuthorityKeypair are paths to
 	// solana-keygen JSON files. They are secrets: never log their contents.
 	// Verification-only processes need neither.
@@ -62,6 +74,7 @@ type SolanaConfig struct {
 	IssuerAuthorityKeypair   string
 	RequestTimeout           time.Duration
 	TxTimeout                time.Duration
+
 	// Bootstrap makes startup create the registry and register this process's
 	// issuer if missing. Development and test only.
 	Bootstrap bool
@@ -74,6 +87,10 @@ type HTTPConfig struct {
 	WriteTimeout    time.Duration
 	IdleTimeout     time.Duration
 	ShutdownTimeout time.Duration
+
+	// CORSAllowedOrigins are the origins (scheme://host[:port]) whose browser
+	// code may call the API, such as a wallet web app. Empty allows none.
+	CORSAllowedOrigins []string
 }
 
 // LogConfig controls structured logging.
@@ -91,11 +108,12 @@ func Load(getenv func(string) string) (Config, error) {
 	cfg := Config{
 		Env: Environment(l.str("APP_ENV", string(EnvDevelopment))),
 		HTTP: HTTPConfig{
-			Addr:            l.str("HTTP_ADDR", ":8080"),
-			ReadTimeout:     l.duration("HTTP_READ_TIMEOUT", 10*time.Second),
-			WriteTimeout:    l.duration("HTTP_WRITE_TIMEOUT", 15*time.Second),
-			IdleTimeout:     l.duration("HTTP_IDLE_TIMEOUT", 60*time.Second),
-			ShutdownTimeout: l.duration("HTTP_SHUTDOWN_TIMEOUT", 15*time.Second),
+			Addr:               l.str("HTTP_ADDR", ":8080"),
+			ReadTimeout:        l.duration("HTTP_READ_TIMEOUT", 10*time.Second),
+			WriteTimeout:       l.duration("HTTP_WRITE_TIMEOUT", 15*time.Second),
+			IdleTimeout:        l.duration("HTTP_IDLE_TIMEOUT", 60*time.Second),
+			ShutdownTimeout:    l.duration("HTTP_SHUTDOWN_TIMEOUT", 15*time.Second),
+			CORSAllowedOrigins: l.origins("CORS_ALLOWED_ORIGINS"),
 		},
 		Log: LogConfig{
 			Level:  l.level("LOG_LEVEL", slog.LevelInfo),
@@ -107,6 +125,7 @@ func Load(getenv func(string) string) (Config, error) {
 			CredentialTTL:  l.duration("CREDENTIAL_TTL", 30*24*time.Hour),
 		},
 	}
+	cfg.Challenge.TTL = l.duration("CHALLENGE_TTL", 5*time.Minute)
 	cfg.Simulation.Enabled = l.boolean("APPROVAL_SIMULATION_ENABLED", cfg.Env != EnvProduction)
 	cfg.Solana = SolanaConfig{
 		RPCURL:                   l.str("SOLANA_RPC_URL", ""),
@@ -210,6 +229,25 @@ func (l *loader) duration(key string, def time.Duration) time.Duration {
 		return def
 	}
 	return d
+}
+
+// origins reads a comma-separated list of origins, each scheme://host[:port]
+// with no path.
+func (l *loader) origins(key string) []string {
+	var out []string
+	for _, o := range strings.Split(l.getenv(key), ",") {
+		if o = strings.TrimSpace(o); o == "" {
+			continue
+		}
+		u, err := url.Parse(o)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" ||
+			u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
+			l.fail(key, o, "must be an origin such as http://localhost:9091 (scheme and host, no path)")
+			continue
+		}
+		out = append(out, o)
+	}
+	return out
 }
 
 func (l *loader) boolean(key string, def bool) bool {

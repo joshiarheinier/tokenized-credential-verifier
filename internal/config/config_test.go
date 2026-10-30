@@ -173,3 +173,33 @@ func TestProductionRequiresTheChain(t *testing.T) {
 		t.Fatalf("err = %v, want bootstrap refused in production", err)
 	}
 }
+
+func TestChallengeAndCORSSettings(t *testing.T) {
+	cfg, err := Load(env(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Challenge.TTL != 5*time.Minute || len(cfg.HTTP.CORSAllowedOrigins) != 0 {
+		t.Errorf("defaults = %v, %v, want 5m and no origins", cfg.Challenge.TTL, cfg.HTTP.CORSAllowedOrigins)
+	}
+
+	cfg, err = Load(env(map[string]string{
+		"CHALLENGE_TTL":        "90s",
+		"CORS_ALLOWED_ORIGINS": " http://localhost:9091 , https://wallet.example,",
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Challenge.TTL != 90*time.Second {
+		t.Errorf("ChallengeTTL = %v, want 90s", cfg.Challenge.TTL)
+	}
+	if got := strings.Join(cfg.HTTP.CORSAllowedOrigins, "|"); got != "http://localhost:9091|https://wallet.example" {
+		t.Errorf("origins = %q", got)
+	}
+
+	for _, bad := range []string{"localhost:9091", "http://localhost:9091/path", "ftp://x.example", "*"} {
+		if _, err := Load(env(map[string]string{"CORS_ALLOWED_ORIGINS": bad})); err == nil || !strings.Contains(err.Error(), "CORS_ALLOWED_ORIGINS") {
+			t.Errorf("%q: err = %v, want a CORS_ALLOWED_ORIGINS error", bad, err)
+		}
+	}
+}

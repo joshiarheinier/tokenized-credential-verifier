@@ -30,12 +30,15 @@ const (
 	ReasonUnavailable Reason = "verification_unavailable"
 )
 
-// Result is the outcome of verifying a presented credential. Subject and
-// credential id are deliberately not exposed to the relying application.
+// Result is the outcome of verifying a presented credential. The credential id
+// is deliberately not exposed. Subject is set only for valid credentials, for the
+// challenge-response protocol's holder binding; the HTTP gateway never returns it from
+// the bare verify endpoint, so relying applications do not learn it.
 type Result struct {
 	Valid          bool
 	Reason         Reason
 	Issuer         string
+	Subject        string
 	CredentialType string
 	ExpiresAt      time.Time
 	Claims         map[string]any
@@ -119,6 +122,7 @@ func (s *Service) Verify(ctx context.Context, token string) Result {
 	return Result{
 		Valid:          true,
 		Issuer:         c.Issuer,
+		Subject:        c.Subject,
 		CredentialType: c.CredentialType,
 		ExpiresAt:      time.Unix(c.ExpiresAt, 0).UTC(),
 		Claims:         policy.Disclosed(c.Attributes),

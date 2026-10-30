@@ -46,4 +46,7 @@ Analogy: this is like a certificate authority system. `initialize_registry` sets
 |---|---|
 | **PDA (Program Derived Address)** | A deterministic account address derived from fixed seeds plus the program ID, so anyone can compute where a record lives. |
 | **Fail closed** | If trust state can't be established (missing account, RPC outage), the credential is treated as not verified, never as valid. |
+| **Challenge** | A relying application's request that a holder prove a credential and consent to sharing named claims. Single use, short lived, tied to the application (its audience). |
+| **Response** | The holder's answer to a challenge: the credential plus a signature, made with the holder's key, over the challenge text. In the wider credential ecosystem (W3C Verifiable Credentials, OpenID4VP) this is called a *presentation*. See `challenge_response_protocol.md`. |
+| **Holder** | The user, acting through their wallet. Their key is what a credential is bound to. |
 | **Trust layer** | Solana's role here. It records who is trusted and what is revoked. It does not verify identities and does not replace signature checks. |

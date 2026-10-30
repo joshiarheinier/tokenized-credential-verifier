@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/approval"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/challenge"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/credential"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/verification"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/config"
@@ -27,6 +28,7 @@ import (
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/registry"
 	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
 	httpgateway "github.com/joshiarheinier/tokenized-credential-verifier/internal/gateways/http"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/infrastructure/challengestore"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/infrastructure/client/blockchain"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/infrastructure/logging"
 )
@@ -168,7 +170,16 @@ func buildAPI(cfg config.Config, logger *slog.Logger) (httpgateway.API, error) {
 	}
 	verifier := domaincredential.NewVerifier(schemas, nil)
 	verifier.Trust(iss.ID, iss.Signer.PublicKey())
-	api := httpgateway.API{CredentialVerification: verification.NewService(verifier, policies, verifyOpts...)}
+	verificationService := verification.NewService(verifier, policies, verifyOpts...)
+	challengesService, err := challenge.NewService(challengestore.NewMemory(challenge.MaxOpenChallenges), verificationService, cfg.Challenge.TTL)
+	if err != nil {
+		return httpgateway.API{}, err
+	}
+	api := httpgateway.API{
+		CredentialVerification: verificationService,
+		Challenges:             challengesService,
+		AllowedOrigins:         cfg.HTTP.CORSAllowedOrigins,
+	}
 
 	if cfg.Simulation.Enabled {
 		logger.Warn("simulated approvals are enabled: for local development only")

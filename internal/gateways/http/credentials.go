@@ -44,7 +44,11 @@ type CredentialVerificationService interface {
 type API struct {
 	ApprovalSimulation     ApprovalSimulationService
 	Credentials            CredentialService
+	Challenges             ChallengeService
 	CredentialVerification CredentialVerificationService
+
+	// AllowedOrigins are the browser origins allowed to call the API (CORS).
+	AllowedOrigins []string
 }
 
 // v1Handlers holds the /v1 handler methods. Routes are bound to them in

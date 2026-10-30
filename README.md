@@ -179,15 +179,18 @@ internal/
     credential/              Credential model, schemas, Ed25519 signer and verifier
     credential/kyc/          The KYCStatus credential type (first registered type)
     issuer/                  Issuer identity and signing-key loading
+    challenge/               Challenge-response protocol model: challenges, the text a holder signs, holder binding
     registry/                The trust registry's model: issuer records, credential status, ids, shared errors
     verification/            Relying-application policy: accepted types and issuers, required and disclosed claims
   application/               Use cases; orchestrate the domain
     approval/                Issuer approval decisions: recorded once, consumed once at issuance (in memory)
-    credential/              Issuance: check the approval, register on chain, sign
+    credential/              Issuance: check the approval, register on chain, sign; revoke; suspend the issuer
+    challenge/               Challenge-response protocol: create challenges, accept holder-bound responses, serve results
     verification/            Verification: signature, policy and on-chain checks, with coarse rejection reasons
   gateways/
     http/                    HTTP gateway: routes, middleware (request logging, panic recovery), handlers
   infrastructure/            Technical adapters
+    challengestore/          In-memory store for challenges
     client/blockchain/       Solana implementation of the registry (the only package importing the Solana SDK)
     logging/                 slog logger construction
   config/                    Environment-variable configuration with validation
