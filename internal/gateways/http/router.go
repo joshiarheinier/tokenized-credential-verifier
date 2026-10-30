@@ -31,13 +31,13 @@ func NewRouter(logger *slog.Logger, api API, checks ...ReadinessCheck) http.Hand
 
 	// Simulated approvals, and issuing, revoking and suspending (development only)
 	if api.ApprovalSimulation != nil {
-		mux.HandleFunc("POST /v1/approvals/simulate", v1.simulate)
+		mux.HandleFunc("POST /v1/approvals/simulate", v1.simulate) // demo only
 	}
 	if api.Credentials != nil {
-		mux.HandleFunc("POST /v1/credentials", v1.issue)
-		mux.HandleFunc("POST /v1/credentials/revoke", v1.revoke)
-		mux.HandleFunc("POST /v1/issuer/suspend", v1.setIssuerActive(false))
-		mux.HandleFunc("POST /v1/issuer/reactivate", v1.setIssuerActive(true))
+		mux.HandleFunc("POST /v1/credentials", v1.issue)                       // demo only
+		mux.HandleFunc("POST /v1/credentials/revoke", v1.revoke)               // demo only
+		mux.HandleFunc("POST /v1/issuer/suspend", v1.setIssuerActive(false))   // demo only
+		mux.HandleFunc("POST /v1/issuer/reactivate", v1.setIssuerActive(true)) // demo only
 	}
 
 	// Challenge-response protocol: challenges, responses and results
@@ -50,7 +50,7 @@ func NewRouter(logger *slog.Logger, api API, checks ...ReadinessCheck) http.Hand
 
 	// Verification
 	if api.CredentialVerification != nil {
-		mux.HandleFunc("POST /v1/credentials/verify", v1.verify)
+		mux.HandleFunc("POST /v1/credentials/verify", v1.verify) // demo only
 	}
 
 	return recoverPanics(logger, logRequests(logger, cors(api.AllowedOrigins, mux)))
