@@ -158,9 +158,12 @@ rejected, so an issuer cannot attach extra (possibly personal) data. KYC status
 without touching the credential, verification or registry code. See
 [`docs/credential_types.md`](docs/credential_types.md).
 
-Limitations: the simulated approval store is in memory (lost on restart),
-and the verifier's local key set is only this process's own issuer key (the
-registry is checked on top of it, but does not yet supply other issuers' keys).
+With a registry configured, the verifier takes the issuer's signing key from
+the registry, so only issuers registered and active on chain are accepted.
+Limitation: the simulated approval store is in memory (lost on restart).
+
+To try the whole flow by hand (wallet, backend, dApp and the on-chain data), see
+[`docs/phase4_demo.md`](docs/demo_guide.md).
 
 ## Project layout
 
@@ -170,6 +173,7 @@ The code follows a layered, domain-driven structure.
 cmd/
   api/                       Composition root: loads config, builds and wires everything, runs the HTTP server
   issuerkeygen/              Generates an issuer signing seed
+  onchaininspect/            Read-only HTTP view (curl) of what the registry holds on Solana
 internal/
   domain/                    Business rules and concepts; no dependency on the layers below
     credential/              Credential model, schemas, Ed25519 signer and verifier
@@ -188,6 +192,8 @@ internal/
     logging/                 slog logger construction
   config/                    Environment-variable configuration with validation
   testutil/                  Helpers for integration tests (build tag `integration`)
+demo-wallet/                 Demo credential wallet (CLI); separate module, talks to the backend over HTTP
+demo-dapp/                   Demo relying application (CLI + HTTP); separate module, asks the verifier API
 contracts/credential-registry/   Anchor program: the on-chain trust registry
 scripts/                     Local validator and integration-test runners (WSL)
 docs/                        Design and reference documents

@@ -5,6 +5,8 @@
 #
 #   localnet.sh run          start the validator in the foreground
 #   localnet.sh program-id   print the registry program id
+#   localnet.sh fund         with the validator running, create the demo issuer authority
+#                            keypair and give both authority keys some SOL
 #
 # Requires `make anchor-build` first. State lives outside the repo except for
 # the git-ignored test keypair in .local/.
@@ -31,8 +33,15 @@ run)
 	exec solana-test-validator --reset --quiet --ledger "$LEDGER" \
 		--upgradeable-program "$PROGRAM_ID" "$SO" "$KEYPAIR"
 	;;
+fund)
+	ISSUER_KEYPAIR="$ROOT/.local/demo-issuer-authority-keypair.json"
+	[ -f "$ISSUER_KEYPAIR" ] || solana-keygen new --no-bip39-passphrase --silent -o "$ISSUER_KEYPAIR"
+	for kp in "$KEYPAIR" "$ISSUER_KEYPAIR"; do
+		solana airdrop 100 "$(solana-keygen pubkey "$kp")" --url http://127.0.0.1:8899
+	done
+	;;
 *)
-	echo "usage: $0 run|program-id" >&2
+	echo "usage: $0 run|program-id|fund" >&2
 	exit 2
 	;;
 esac

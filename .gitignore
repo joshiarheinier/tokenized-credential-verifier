@@ -34,3 +34,6 @@ Thumbs.db
 
 # Local validator state and test keypairs
 .local/
+
+# Demo wallet storage
+.wallet/
