@@ -29,6 +29,7 @@ With no command, starts an interactive prompt where the commands below can be
 typed one after another (help, exit).
 
 commands:
+  serve     run the browser wallet (web app) that uses your Phantom account
   request   get a KYC credential from the issuer and store it
   list      show stored credentials
   present   present a stored credential to a relying application
@@ -75,6 +76,14 @@ func run(cmd string, args []string, out io.Writer) error {
 	fs := flag.NewFlagSet(cmd, flag.ContinueOnError)
 	dir := fs.String("dir", envOr("WALLET_DIR", ".wallet"), "wallet directory")
 	switch cmd {
+	case "serve":
+		addr := fs.String("addr", envOr("WALLET_ADDR", "127.0.0.1:9091"), "listen address for the web app")
+		verifier := fs.String("verifier", envOr("VERIFIER_URL", "http://127.0.0.1:8080"), "base URL of the verifier API")
+		issuer := fs.String("issuer", envOr("ISSUER_URL", "http://127.0.0.1:8080"), "base URL of the issuer API")
+		if err := fs.Parse(args); err != nil {
+			return err
+		}
+		return serveWeb(out, *addr, webConfig{Verifier: *verifier, Issuer: *issuer})
 	case "request":
 		api := fs.String("api", envOr("ISSUER_URL", "http://localhost:8080"), "base URL of the issuer API")
 		subject := fs.String("subject", "did:example:demo-user", "subject the credential is issued to")

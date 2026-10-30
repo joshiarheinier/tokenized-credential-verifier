@@ -148,3 +148,79 @@ The revoke and suspend endpoints are development conveniences like the
 simulated approvals and issuance: they are only registered when
 `APPROVAL_SIMULATION_ENABLED` is on, they answer 501 if no registry is
 configured, and they have no authentication yet.
+
+## 7. The browser wallet, with Phantom
+
+A web wallet that keeps credentials in your browser and uses your Phantom account
+as the holder key. Phantom only signs a short text; it holds none of the
+credentials, sends no transaction and needs no funds or network setup. The
+application page that asks for a credential comes later; for now you play the
+application yourself with one `curl`.
+
+**Setup.** Install the Phantom browser extension and create or pick any test
+account. Add the wallet's origin to the backend's `.local/demo.env` and restart the
+backend (use `localhost`, not `127.0.0.1`, in the browser):
+
+```text
+CORS_ALLOWED_ORIGINS=http://localhost:9091
+```
+
+Then start the wallet:
+
+```bash
+cd demo-wallet && go run . serve      # http://127.0.0.1:9091
+```
+
+The wallet talks to `http://127.0.0.1:8080` by default (`-verifier` and
+`-issuer` change that, as do `VERIFIER_URL` and `ISSUER_URL`).
+
+**1. Get a credential.** Open <http://localhost:9091>, press *Connect Phantom*
+(approve in the extension), then *Get credential*. It appears in the list as
+*bound to this account*: its subject is your Phantom address. You can open its
+claims and delete it.
+
+**2. Pose a challenge, as an application would.** In Git Bash:
+
+```bash
+curl -X POST http://127.0.0.1:8080/v1/challenges -H "Content-Type: application/json" \
+  -d '{"audience":"http://localhost:9090","credential_type":"KYCStatus","claims":["over_18"]}'
+```
+
+(In Windows PowerShell: `Invoke-RestMethod -Method Post -Uri http://127.0.0.1:8080/v1/challenges -ContentType application/json -Body '{"audience":"http://localhost:9090","credential_type":"KYCStatus","claims":["over_18"]}'`.)
+Keep the `challenge_id` and `result_secret` from the reply.
+
+**3. Answer it in the wallet.** Open
+`http://localhost:9091/present?challenge=<challenge_id>`. The page shows who is
+asking (`http://localhost:9090`), which claim, and what your credential would
+share (`over_18 = true`). Press *Approve and sign with Phantom*: Phantom shows
+the exact text being signed, which is also your consent record. The wallet then
+says *Verified*.
+
+**4. Read the verdict, as the application.**
+
+```bash
+curl http://127.0.0.1:8080/v1/challenges/<challenge_id>/result -H "Authorization: Bearer <result_secret>"
+```
+
+It holds only `over_18`, not your country or the KYC flag.
+
+**Things to try.** Reload the consent page after answering: *already answered*
+(a challenge works once). Switch to another Phantom account and open a fresh
+challenge: the credential is listed as *not usable* because it was issued to a
+different account. Decline in Phantom: nothing is sent. Press *Revoke (demo)*
+on a credential: the issuer revokes it on chain (`/credentials` on the inspector
+shows `revoked`), and a challenge answered with it is then refused by the
+verifier. *Remove from wallet* is different: it only deletes this wallet's copy
+and does not revoke anything, so the credential stays valid on chain. Revoking
+needs the credential, so revoke before you remove it.
+
+**If something does not work.** *Could not reach http://127.0.0.1:8080 … CORS*:
+the backend does not list the wallet's origin in `CORS_ALLOWED_ORIGINS`.
+*Phantom was not found*: reload after installing, and open the wallet as
+`http://localhost:9091`. The wallet serves a strict Content-Security-Policy; if
+Phantom is installed but never detected, that is the first thing to suspect.
+
+**Testing the wallet's code.** Its protocol logic is plain JavaScript with Node
+tests in `demo-wallet/webtest`, including a check that a signature made in
+JavaScript is accepted by the Go verifier. Node is not on the Windows path here
+but is in WSL: `cd demo-wallet && node --test`.

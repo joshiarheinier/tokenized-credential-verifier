@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Demo wallet</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main>
+    <h1>Demo wallet</h1>
+    <p class="lede">Keeps your credentials in this browser. Phantom is your key: it proves a credential is yours and asks you before anything is shared.</p>
+
+    <p id="status" class="notice" hidden></p>
+
+    <section>
+      <h2>Phantom</h2>
+      <div id="account"></div>
+    </section>
+
+    <section>
+      <h2>Your credentials</h2>
+      <div id="credentials"></div>
+      <p id="where" class="hint"></p>
+      <p class="hint">Credentials are stored unencrypted in this browser's local storage. This is a demo wallet. <em>Remove from wallet</em> only deletes this wallet's copy; <em>Revoke</em> (a demo shortcut) asks the issuer to revoke it on chain.</p>
+    </section>
+
+    <section>
+      <h2>Get a credential</h2>
+      <p class="hint">From the demo issuer, whose approval step is simulated. The credential is bound to your connected Phantom account.</p>
+      <form id="request-form">
+        <label class="check"><input type="checkbox" id="kyc" checked> KYC verified</label>
+        <label class="check"><input type="checkbox" id="over18" checked> Over 18</label>
+        <label>Country <input id="country" value="ID" maxlength="2" pattern="[A-Za-z]{2}" size="3" required></label>
+        <button type="submit" id="request-button">Get credential</button>
+      </form>
+    </section>
+  </main>
+  <script type="module" src="/js/home.js"></script>
+</body>
+</html>

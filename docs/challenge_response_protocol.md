@@ -228,13 +228,18 @@ that is not a holder id and a signature that does not verify.
 
 ```text
 1. App server  → Verifier : POST /v1/challenges            (keeps result_secret)
-2. App page    → Wallet   : open  <wallet>/present?challenge=<id>&verifier=<verifier base URL>
+2. App page    → Wallet   : open  <wallet>/present?challenge=<id>[&verifier=<verifier base URL>]
 3. Wallet      → Verifier : GET /v1/challenges/<id>        (consent screen)
 4. Wallet      → Phantom  : signMessage(message)           (user approves)
 5. Wallet      → Verifier : POST /v1/challenges/<id>/response
 6. Wallet      → App page : redirect to callback_url?challenge=<id>
 7. App server  → Verifier : GET /v1/challenges/<id>/result  (Bearer result_secret)
 ```
+
+**The wallet sends a credential only to the verifier it is configured with.** The
+`verifier` parameter in the link is optional; if it is present and differs from
+the wallet's configured verifier, the wallet refuses the request. Otherwise any
+application could point the wallet at its own server and collect credentials.
 
 The wallet redirects only to the `callback_url` the verifier returned for that
 challenge, which has the audience's origin, so it cannot be used as an open

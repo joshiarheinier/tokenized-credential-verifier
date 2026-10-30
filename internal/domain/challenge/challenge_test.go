@@ -3,6 +3,7 @@ package challenge
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"testing"
@@ -150,5 +151,26 @@ func TestNewChallengeValidatesAndNormalizes(t *testing.T) {
 		if err := f(); !errors.Is(err, ErrInvalidRequest) {
 			t.Errorf("%s: err = %v, want ErrInvalidRequest", name, err)
 		}
+	}
+}
+
+// The browser wallet builds the signed text and signs it in JavaScript. This is a
+// signature made by that code (demo-wallet/webtest/interop.test.js pins the same
+// vector) with a fixed test key over the pinned message above: if either side's
+// idea of the text drifts, one of the two tests fails.
+func TestVerifiesASignatureMadeByTheWalletsJavaScript(t *testing.T) {
+	const (
+		address   = "9C6hybhQ6Aycep9jaUnP6uL9ZYvDjUp1aSkFWPUFJtpj"
+		signature = "I5Uh4HRDnZhfeAtM260c3m4koTqzH5+88iXNixq/4DNZDXCbGFMYP8vFHsM6lzHFfdakEHfmT2vjPE5Ev3EDDw=="
+	)
+	sig, err := base64.StdEncoding.DecodeString(signature)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyHolder(testChallenge(t), "test", "solana:"+address, sig); err != nil {
+		t.Fatalf("a signature made by the wallet's JavaScript was refused: %v", err)
+	}
+	if err := VerifyHolder(testChallenge(t), "other-token", "solana:"+address, sig); err == nil {
+		t.Fatal("the same signature was accepted for a different credential")
 	}
 }

@@ -1,0 +1,5 @@
+{
+  "private": true,
+  "type": "module",
+  "description": "Only so Node treats the wallet's modules as ES modules when running webtest. The wallet has no build step and no dependencies."
+}

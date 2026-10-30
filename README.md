@@ -195,7 +195,7 @@ internal/
     logging/                 slog logger construction
   config/                    Environment-variable configuration with validation
   testutil/                  Helpers for integration tests (build tag `integration`)
-demo-wallet/                 Demo credential wallet (CLI); separate module, talks to the backend over HTTP
+demo-wallet/                 Demo credential wallet: a CLI, and a browser wallet using Phantom (`serve`); separate module, talks to the backend over HTTP
 demo-dapp/                   Demo relying application (CLI + HTTP); separate module, asks the verifier API
 contracts/credential-registry/   Anchor program: the on-chain trust registry
 scripts/                     Local validator and integration-test runners (WSL)
