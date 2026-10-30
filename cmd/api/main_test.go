@@ -6,6 +6,9 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -49,5 +52,36 @@ func TestServeAndGracefulShutdown(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("serve did not return after context cancellation")
+	}
+}
+
+func TestLoadEnvFile(t *testing.T) {
+	t.Setenv("ENVFILE_EXISTING", "from-environment")
+	path := filepath.Join(t.TempDir(), "demo.env")
+	content := "# a comment\n\nENVFILE_NEW = from-file\nENVFILE_EXISTING=from-file\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Unsetenv("ENVFILE_NEW") })
+
+	if err := loadEnvFile(path); err != nil {
+		t.Fatal(err)
+	}
+	if got := os.Getenv("ENVFILE_NEW"); got != "from-file" {
+		t.Errorf("ENVFILE_NEW = %q, want from-file", got)
+	}
+	if got := os.Getenv("ENVFILE_EXISTING"); got != "from-environment" {
+		t.Errorf("ENVFILE_EXISTING = %q, want the real environment to win", got)
+	}
+}
+
+func TestLoadEnvFileRejectsBadLinesWithoutQuotingThem(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "bad.env")
+	if err := os.WriteFile(path, []byte("SECRET-without-equals\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := loadEnvFile(path)
+	if err == nil || strings.Contains(err.Error(), "SECRET") {
+		t.Fatalf("err = %v, want an error that does not quote the line", err)
 	}
 }

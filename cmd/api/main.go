@@ -6,12 +6,14 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -37,6 +39,14 @@ func main() {
 }
 
 func run() error {
+	envFile := flag.String("env-file", "", "load KEY=VALUE lines from this file into the environment (development convenience)")
+	flag.Parse()
+	if *envFile != "" {
+		if err := loadEnvFile(*envFile); err != nil {
+			return err
+		}
+	}
+
 	cfg, err := config.Load(os.Getenv)
 	if err != nil {
 		return err
@@ -57,6 +67,34 @@ func run() error {
 	if err := serve(ctx, srv, ln, cfg, logger); err != nil {
 		logger.Error("api exited with error", "error", err)
 		return err
+	}
+	return nil
+}
+
+// loadEnvFile sets each KEY=VALUE line of path in the process environment,
+// skipping blank lines and # comments. Variables that are already set win, so a
+// real environment variable overrides the file. Errors never quote the file's
+// contents, which may be secrets.
+func loadEnvFile(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("env file: %w", err)
+	}
+	for i, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, value, ok := strings.Cut(line, "=")
+		key = strings.TrimSpace(key)
+		if !ok || key == "" {
+			return fmt.Errorf("env file %s: line %d is not KEY=VALUE", path, i+1)
+		}
+		if _, set := os.LookupEnv(key); !set {
+			if err := os.Setenv(key, strings.TrimSpace(value)); err != nil {
+				return fmt.Errorf("env file: %w", err)
+			}
+		}
 	}
 	return nil
 }
