@@ -23,6 +23,7 @@ type rpcAPI interface {
 	SendTransactionWithOpts(ctx context.Context, tx *solana.Transaction, opts rpc.TransactionOpts) (solana.Signature, error)
 	GetSignatureStatuses(ctx context.Context, searchTransactionHistory bool, sigs ...solana.Signature) (*rpc.GetSignatureStatusesResult, error)
 	GetBlockHeight(ctx context.Context, commitment rpc.CommitmentType) (uint64, error)
+	GetProgramAccountsWithOpts(ctx context.Context, program solana.PublicKey, opts *rpc.GetProgramAccountsOpts) (rpc.GetProgramAccountsResult, error)
 }
 
 // options configures a Client.
@@ -204,6 +205,50 @@ func (c *Client) GetCredentialStatus(ctx context.Context, ref [32]byte) (registr
 		return registry.CredentialStatus{}, fmt.Errorf("credential status: %w: ref mismatch", ErrInvalidAccount)
 	}
 	return st, nil
+}
+
+// Stored is a record together with the address of the account holding it.
+type Stored[T any] struct {
+	Address solana.PublicKey
+	Record  T
+}
+
+// ListIssuers returns every issuer record in the registry. It is for
+// inspection and tooling; verification looks issuers up by id.
+func (c *Client) ListIssuers(ctx context.Context) ([]Stored[registry.IssuerRecord], error) {
+	return list(ctx, c, acctIssuerRecord, decodeIssuerRecord)
+}
+
+// ListCredentials returns the status of every credential in the registry. It is
+// for inspection and tooling; verification looks credentials up by reference.
+func (c *Client) ListCredentials(ctx context.Context) ([]Stored[registry.CredentialStatus], error) {
+	return list(ctx, c, acctCredentialState, decodeCredentialStatus)
+}
+
+func list[T any](ctx context.Context, c *Client, disc [8]byte, decode func(program, owner solana.PublicKey, data []byte) (T, error)) ([]Stored[T], error) {
+	var accounts rpc.GetProgramAccountsResult
+	err := c.retry(ctx, func(ctx context.Context) error {
+		var err error
+		accounts, err = c.rpc.GetProgramAccountsWithOpts(ctx, c.opts.ProgramID, &rpc.GetProgramAccountsOpts{
+			Encoding:   solana.EncodingBase64,
+			Commitment: c.opts.Commitment,
+			Filters:    []rpc.RPCFilter{{Memcmp: &rpc.RPCFilterMemcmp{Offset: 0, Bytes: disc[:]}}},
+		})
+		return err
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", registry.ErrUnavailable, err)
+	}
+	out := make([]Stored[T], 0, len(accounts))
+	for _, acc := range accounts {
+		rec, err := decode(c.opts.ProgramID, acc.Account.Owner, acc.Account.Data.GetBinary())
+		if err != nil {
+			return nil, fmt.Errorf("account %s: %w", acc.Pubkey, err)
+		}
+		out = append(out, Stored[T]{Address: acc.Pubkey, Record: rec})
+	}
+	return out, nil
 }
 
 type account struct {

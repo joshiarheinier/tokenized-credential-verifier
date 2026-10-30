@@ -203,6 +203,10 @@ func (f *fakeRPC) GetSignatureStatuses(context.Context, bool, ...solana.Signatur
 	return &rpc.GetSignatureStatusesResult{Value: []*rpc.SignatureStatusesResult{f.status}}, nil
 }
 
+func (f *fakeRPC) GetProgramAccountsWithOpts(context.Context, solana.PublicKey, *rpc.GetProgramAccountsOpts) (rpc.GetProgramAccountsResult, error) {
+	return nil, errors.New("not implemented")
+}
+
 func (f *fakeRPC) GetBlockHeight(context.Context, rpc.CommitmentType) (uint64, error) {
 	return f.height, nil
 }

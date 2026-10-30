@@ -17,6 +17,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -195,6 +196,20 @@ func TestRegistryLifecycle(t *testing.T) {
 		}
 		if st.State != registry.CredentialActive || st.IssuerID != issuerID || !st.ExpiresAt.Equal(exp) {
 			t.Fatalf("status = %+v", st)
+		}
+		creds, err := e.client.ListCredentials(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.ContainsFunc(creds, func(c blockchain.Stored[registry.CredentialStatus]) bool { return c.Record == st }) {
+			t.Fatalf("ListCredentials does not contain %+v", st)
+		}
+		issuers, err := e.client.ListIssuers(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.ContainsFunc(issuers, func(i blockchain.Stored[registry.IssuerRecord]) bool { return i.Record.IssuerID == issuerID }) {
+			t.Fatal("ListIssuers does not contain the registered issuer")
 		}
 		if res, err := e.client.RegisterCredential(ctx, issuerID, ref, exp); err != nil || res.Changed {
 			t.Fatalf("identical repeat: res=%+v err=%v, want no-op", res, err)

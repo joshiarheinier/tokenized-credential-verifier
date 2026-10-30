@@ -16,6 +16,10 @@ func LoadKeypair(path string) (solana.PrivateKey, error) {
 	return key, nil
 }
 
+// Address returns the base58 form of a 32-byte Solana public key, as shown by
+// the Solana CLI and explorers.
+func Address(key [32]byte) string { return solana.PublicKeyFromBytes(key[:]).String() }
+
 // loadKeypair loads an optional keypair; an empty path means "not configured".
 func loadKeypair(role, path string) (*solana.PrivateKey, error) {
 	if path == "" {
