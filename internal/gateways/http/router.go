@@ -29,12 +29,15 @@ func NewRouter(logger *slog.Logger, api API, checks ...ReadinessCheck) http.Hand
 	mux.HandleFunc("GET /healthz", handleHealthz)
 	mux.Handle("GET /readyz", readyzHandler(logger, checks))
 
-	// Simulated approvals and issuance (development only)
+	// Simulated approvals, and issuing, revoking and suspending (development only)
 	if api.ApprovalSimulation != nil {
 		mux.HandleFunc("POST /v1/approvals/simulate", v1.simulate)
 	}
-	if api.CredentialIssuance != nil {
+	if api.Credentials != nil {
 		mux.HandleFunc("POST /v1/credentials", v1.issue)
+		mux.HandleFunc("POST /v1/credentials/revoke", v1.revoke)
+		mux.HandleFunc("POST /v1/issuer/suspend", v1.setIssuerActive(false))
+		mux.HandleFunc("POST /v1/issuer/reactivate", v1.setIssuerActive(true))
 	}
 
 	// Verification

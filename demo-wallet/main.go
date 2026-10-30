@@ -32,6 +32,8 @@ commands:
   request   get a KYC credential from the issuer and store it
   list      show stored credentials
   present   present a stored credential to a relying application
+  revoke    ask the issuer to revoke a stored credential (demo only: in real
+            life the issuer revokes, not the holder)
 
 common flags:
   -dir      wallet directory (env WALLET_DIR, default ./.wallet)`
@@ -97,6 +99,13 @@ func run(cmd string, args []string, out io.Writer) error {
 			return err
 		}
 		return present(out, store{*dir}, *to, *id)
+	case "revoke":
+		api := fs.String("api", envOr("ISSUER_URL", "http://localhost:8080"), "base URL of the issuer API")
+		id := fs.String("id", "", "credential id (default: the newest)")
+		if err := fs.Parse(args); err != nil {
+			return err
+		}
+		return revoke(out, store{*dir}, *api, *id)
 	default:
 		return fmt.Errorf("unknown command %q\n\n%s", cmd, usage)
 	}
@@ -169,6 +178,29 @@ func present(out io.Writer, s store, to, id string) error {
 		return errors.New("access not granted")
 	}
 	fmt.Fprintf(out, "granted (HTTP %d), the application learned: %v\n", status, reply.Claims)
+	return nil
+}
+
+// revoke asks the issuer to revoke a stored credential. Revocation is the
+// issuer's action, so a real wallet would not have this command; the demo does
+// so you can see a revoked credential refused. The credential stays in the
+// wallet: it is still a validly signed token, the chain is what says otherwise.
+func revoke(out io.Writer, s store, api, id string) error {
+	c, err := s.find(id)
+	if err != nil {
+		return err
+	}
+	var reply struct {
+		Error string `json:"error"`
+	}
+	status, err := postJSONStatus(api+"/v1/credentials/revoke", map[string]string{"credential": c.Credential}, &reply)
+	if err != nil {
+		return fmt.Errorf("revoke at %s: %w", api, err)
+	}
+	if status != http.StatusOK {
+		return fmt.Errorf("the issuer refused (HTTP %d): %s", status, reply.Error)
+	}
+	fmt.Fprintf(out, "revoked %s on chain\n", c.ID)
 	return nil
 }
 

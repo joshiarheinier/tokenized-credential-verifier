@@ -34,6 +34,28 @@ func TestPromptShowsDecisionsAndStatus(t *testing.T) {
 	}
 }
 
+func TestPromptVerifyDecidesLikeTheHTTPRoute(t *testing.T) {
+	for _, tc := range []struct{ name, verifierReply, want string }{
+		{"granted", `{"valid":true,"issuer":"did:example:issuer","claims":{"kyc_verified":true}}`, `"access":"granted"`},
+		{"denied", `{"valid":false,"reason":"revoked"}`, `"reason":"revoked"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			v := fakeVerifier(t, 200, tc.verifierReply)
+			var out bytes.Buffer
+			h := &history{out: &bytes.Buffer{}}
+			a := &app{verifier: verifier{baseURL: v.URL, client: http.DefaultClient}, log: h.add}
+
+			repl(strings.NewReader("verify some-token\nverify\n"), &out, a, h)
+			if !strings.Contains(out.String(), tc.want) || !strings.Contains(out.String(), "usage: verify") {
+				t.Fatalf("output lacks %q or the usage hint:\n%s", tc.want, out.String())
+			}
+			if len(h.all()) != 1 {
+				t.Fatalf("decisions logged = %d, want 1 (the empty verify must not call the verifier)", len(h.all()))
+			}
+		})
+	}
+}
+
 func TestStatusReportsAnUnreachableVerifier(t *testing.T) {
 	a := &app{verifier: verifier{baseURL: "http://127.0.0.1:1", client: http.DefaultClient}}
 	if got := a.verifierStatus(); !strings.Contains(got, "unreachable") {

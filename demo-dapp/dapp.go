@@ -109,22 +109,28 @@ func (a *app) access(w http.ResponseWriter, r *http.Request) {
 
 	ctx, cancel := context.WithTimeout(r.Context(), verifierTimeout)
 	defer cancel()
-	res, err := a.verifier.verify(ctx, req.Credential)
+	status, resp := a.decide(ctx, req.Credential)
+	reply(w, status, resp)
+}
+
+// decide asks the verifier about a presented credential and turns the answer
+// into the app's access decision and HTTP status.
+func (a *app) decide(ctx context.Context, credential string) (int, accessResponse) {
+	res, err := a.verifier.verify(ctx, credential)
 	switch {
 	case err != nil:
 		a.log("access denied: %v", err)
-		reply(w, http.StatusServiceUnavailable, accessResponse{Access: "denied", Reason: reasonUnavailable})
+		return http.StatusServiceUnavailable, accessResponse{Access: "denied", Reason: reasonUnavailable}
 	case !res.Valid:
 		a.log("access denied: %s", res.Reason)
-		reply(w, http.StatusForbidden, accessResponse{Access: "denied", Reason: res.Reason})
-	default:
-		a.log("access granted: issuer=%s type=%s", res.Issuer, res.CredentialType)
-		reply(w, http.StatusOK, accessResponse{
-			Access:  "granted",
-			Message: "welcome: this is the members-only area",
-			Issuer:  res.Issuer,
-			Claims:  res.Claims,
-		})
+		return http.StatusForbidden, accessResponse{Access: "denied", Reason: res.Reason}
+	}
+	a.log("access granted: issuer=%s type=%s", res.Issuer, res.CredentialType)
+	return http.StatusOK, accessResponse{
+		Access:  "granted",
+		Message: "welcome: this is the members-only area",
+		Issuer:  res.Issuer,
+		Claims:  res.Claims,
 	}
 }
 

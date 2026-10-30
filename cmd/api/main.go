@@ -178,7 +178,7 @@ func buildAPI(cfg config.Config, logger *slog.Logger) (httpgateway.API, error) {
 			return httpgateway.API{}, err
 		}
 		api.ApprovalSimulation = approvals
-		api.CredentialIssuance = issuing
+		api.Credentials = issuing
 	}
 	return api, nil
 }

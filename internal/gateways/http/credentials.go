@@ -12,6 +12,7 @@ import (
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/approval"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/credential"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/application/verification"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/registry"
 )
 
 const maxBodyBytes = 16 * 1024
@@ -23,9 +24,14 @@ type ApprovalSimulationService interface {
 	Record(ctx context.Context, req approval.Request) (approval.Result, error)
 }
 
-// CredentialIssuanceService issues credentials for approvals.
-type CredentialIssuanceService interface {
+// CredentialService is the issuing side of the credential lifecycle: issuing
+// credentials for approvals, revoking them, and suspending or reactivating this
+// deployment's issuer in the registry. application/credential.Service
+// implements it.
+type CredentialService interface {
 	IssueFromApproval(ctx context.Context, approvalID string) (credential.Issued, error)
+	Revoke(ctx context.Context, token string) error
+	SetIssuerActive(ctx context.Context, active bool) error
 }
 
 // CredentialVerificationService verifies presented credentials.
@@ -37,7 +43,7 @@ type CredentialVerificationService interface {
 // unregistered (they return 404), e.g. simulation and issuance in production.
 type API struct {
 	ApprovalSimulation     ApprovalSimulationService
-	CredentialIssuance     CredentialIssuanceService
+	Credentials            CredentialService
 	CredentialVerification CredentialVerificationService
 }
 
@@ -126,7 +132,7 @@ func (h *v1Handlers) issue(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "approval_id is required")
 		return
 	}
-	issued, err := h.api.CredentialIssuance.IssueFromApproval(r.Context(), req.ApprovalID)
+	issued, err := h.api.Credentials.IssueFromApproval(r.Context(), req.ApprovalID)
 	switch {
 	case err == nil:
 		writeJSON(w, http.StatusCreated, issueResponse{Credential: issued.Token, ExpiresAt: issued.ExpiresAt})
@@ -138,6 +144,54 @@ func (h *v1Handlers) issue(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "a credential was already issued for this approval")
 	default:
 		h.internalError(w, r, err)
+	}
+}
+
+type revokeRequest struct {
+	Credential string `json:"credential"`
+}
+
+func (h *v1Handlers) revoke(w http.ResponseWriter, r *http.Request) {
+	var req revokeRequest
+	if !decodeBody(w, r, &req) {
+		return
+	}
+	if req.Credential == "" {
+		writeError(w, http.StatusBadRequest, "credential is required")
+		return
+	}
+	err := h.api.Credentials.Revoke(r.Context(), req.Credential)
+	switch {
+	case err == nil:
+		writeJSON(w, http.StatusOK, map[string]bool{"revoked": true})
+	case errors.Is(err, credential.ErrInvalidCredential):
+		writeError(w, http.StatusUnprocessableEntity, "not a valid, unexpired credential issued by this service")
+	case errors.Is(err, credential.ErrNoRegistry):
+		writeError(w, http.StatusNotImplemented, "revocation requires an on-chain registry")
+	case errors.Is(err, registry.ErrNotFound):
+		writeError(w, http.StatusNotFound, "credential is not registered on chain")
+	case errors.Is(err, registry.ErrUnavailable):
+		writeError(w, http.StatusServiceUnavailable, "registry unavailable")
+	default:
+		h.internalError(w, r, err)
+	}
+}
+
+func (h *v1Handlers) setIssuerActive(active bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		err := h.api.Credentials.SetIssuerActive(r.Context(), active)
+		switch {
+		case err == nil:
+			writeJSON(w, http.StatusOK, map[string]bool{"active": active})
+		case errors.Is(err, credential.ErrNoRegistry):
+			writeError(w, http.StatusNotImplemented, "changing issuer status requires an on-chain registry")
+		case errors.Is(err, registry.ErrNotFound):
+			writeError(w, http.StatusNotFound, "issuer is not registered on chain")
+		case errors.Is(err, registry.ErrUnavailable):
+			writeError(w, http.StatusServiceUnavailable, "registry unavailable")
+		default:
+			h.internalError(w, r, err)
+		}
 	}
 }
 

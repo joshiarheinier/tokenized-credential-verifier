@@ -75,8 +75,20 @@ type registerCall struct {
 }
 
 type fakeBlockchainClient struct {
-	err   error
-	calls []registerCall
+	err     error
+	calls   []registerCall
+	revoked []registerCall
+	status  []bool
+}
+
+func (f *fakeBlockchainClient) SetIssuerStatus(_ context.Context, _ [32]byte, active bool) (registry.WriteResult, error) {
+	f.status = append(f.status, active)
+	return registry.WriteResult{}, f.err
+}
+
+func (f *fakeBlockchainClient) RevokeCredential(_ context.Context, issuerID, ref [32]byte) (registry.WriteResult, error) {
+	f.revoked = append(f.revoked, registerCall{issuerID: issuerID, ref: ref})
+	return registry.WriteResult{}, f.err
 }
 
 func (f *fakeBlockchainClient) RegisterCredential(
@@ -320,5 +332,120 @@ func TestServiceRejectsApprovalsThatDoNotMatchTheirType(t *testing.T) {
 
 	if len(chain.calls) != 0 {
 		t.Fatal("invalid approvals must not be registered on chain")
+	}
+}
+
+func newIssuingService(t *testing.T, signer *domaincredential.Signer, chain *fakeBlockchainClient, now func() time.Time) *Service {
+	t.Helper()
+	approvals := &fakeApprovals{approval: domaincredential.Approval{
+		Subject:        "user-1",
+		CredentialType: testType,
+		Claims:         map[string]any{"tier": "gold", "vip": true},
+	}}
+	opts := []ServiceOption{}
+	if chain != nil {
+		opts = append(opts, WithBlockchainClient(chain))
+	}
+	svc, err := NewService(signer, approvals, testSchemas, time.Hour, now, opts...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return svc
+}
+
+func TestServiceRevokesTheOnChainRecordOfAnIssuedCredential(t *testing.T) {
+	signer := newSigner(t)
+	chain := &fakeBlockchainClient{}
+	svc := newIssuingService(t, signer, chain, func() time.Time { return fixedNow })
+	issued, err := svc.IssueFromApproval(context.Background(), "approval-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	claims, err := verifierTrusting(signer, fixedNow).Verify(issued.Token)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := svc.Revoke(context.Background(), issued.Token); err != nil {
+		t.Fatalf("Revoke: %v", err)
+	}
+	if len(chain.revoked) != 1 ||
+		chain.revoked[0].issuerID != registry.IssuerID(signer.IssuerID()) ||
+		chain.revoked[0].ref != registry.CredentialRef(claims.ID) {
+		t.Fatalf("revoked = %+v, want the issued credential's issuer id and ref", chain.revoked)
+	}
+}
+
+func TestServiceRevokeRejectsWhatItDidNotIssueWithoutSendingAnything(t *testing.T) {
+	signer := newSigner(t)
+	chain := &fakeBlockchainClient{}
+	clock := fixedNow
+	svc := newIssuingService(t, signer, chain, func() time.Time { return clock })
+
+	// Issued by someone else.
+	other := newSigner(t)
+	foreign, err := newIssuingService(t, other, nil, func() time.Time { return fixedNow }).IssueFromApproval(context.Background(), "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Ours, but expired by the time it is presented.
+	ours, err := svc.IssueFromApproval(context.Background(), "a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock = fixedNow.Add(2 * time.Hour)
+
+	for name, token := range map[string]string{"foreign": foreign.Token, "expired": ours.Token, "garbage": "not-a-credential"} {
+		if err := svc.Revoke(context.Background(), token); !errors.Is(err, ErrInvalidCredential) {
+			t.Errorf("%s: err = %v, want ErrInvalidCredential", name, err)
+		}
+	}
+	if len(chain.revoked) != 0 {
+		t.Fatalf("chain was asked to revoke %d credentials, want none", len(chain.revoked))
+	}
+}
+
+func TestServiceRevokeReportsChainErrorsAndNeedsARegistry(t *testing.T) {
+	signer := newSigner(t)
+	chain := &fakeBlockchainClient{}
+	svc := newIssuingService(t, signer, chain, func() time.Time { return fixedNow })
+	issued, err := svc.IssueFromApproval(context.Background(), "approval-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	chain.err = registry.ErrNotFound
+	if err := svc.Revoke(context.Background(), issued.Token); !errors.Is(err, registry.ErrNotFound) {
+		t.Errorf("err = %v, want registry.ErrNotFound", err)
+	}
+
+	noChain := newIssuingService(t, signer, nil, func() time.Time { return fixedNow })
+	if err := noChain.Revoke(context.Background(), issued.Token); err == nil {
+		t.Error("Revoke without a registry succeeded, want an error")
+	}
+}
+
+func TestServiceSuspendsAndReactivatesItsOwnIssuer(t *testing.T) {
+	signer := newSigner(t)
+	chain := &fakeBlockchainClient{}
+	svc := newIssuingService(t, signer, chain, func() time.Time { return fixedNow })
+
+	if err := svc.SetIssuerActive(context.Background(), false); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.SetIssuerActive(context.Background(), true); err != nil {
+		t.Fatal(err)
+	}
+	if len(chain.status) != 2 || chain.status[0] || !chain.status[1] {
+		t.Fatalf("statuses sent = %v, want [false true]", chain.status)
+	}
+
+	chain.err = registry.ErrNotFound
+	if err := svc.SetIssuerActive(context.Background(), false); !errors.Is(err, registry.ErrNotFound) {
+		t.Errorf("err = %v, want registry.ErrNotFound", err)
+	}
+	noChain := newIssuingService(t, signer, nil, func() time.Time { return fixedNow })
+	if err := noChain.SetIssuerActive(context.Background(), false); err == nil {
+		t.Error("SetIssuerActive without a registry succeeded, want an error")
 	}
 }

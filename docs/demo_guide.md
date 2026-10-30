@@ -78,7 +78,9 @@ In the wallet prompt:
 
 `present` prints `granted` with the claims the app learned, or `denied` with a
 coarse reason. The dApp prompt shows each decision as it happens (`log` lists
-them; `status` checks that the verifier is reachable).
+them; `status` checks that the verifier is reachable). The dApp's own
+`verify <credential>` does the same as a wallet's `present`, for a token you
+paste in (the `credential` field of a file in the wallet's `.wallet` folder).
 
 Expected: a normal `request` then `present` is **granted**; after
 `request -kyc-verified=false`, `present` is **denied** (`policy_not_satisfied`).
@@ -107,8 +109,42 @@ credentials: they were registered on the old chain, so the verifier would
 reject them as not registered. The wallet stores them in `./.wallet` of the
 directory you started it from (override with `-dir` or `WALLET_DIR`).
 
-## Not wired into the demo yet
+## 6. Try the rejections
 
-Revoking a credential, and showing the expired and untrusted-issuer cases, are
-the remaining Phase 4 steps. The verification code already rejects all of them
-(covered by unit and integration tests); the demo has no way to trigger them yet.
+Each case below ends with a different reason from the dApp. The wallet commands
+are typed at the wallet prompt; the `curl` lines are plain HTTP calls to the
+backend (use `curl.exe` in Windows PowerShell 5.1).
+
+**Revoked.** `request`, `present` (granted), then `revoke`, then `present`
+again: **denied (`revoked`)**. `curl http://127.0.0.1:9100/credentials` shows the
+same record with `"state": "revoked"`. Revocation is a transaction on Solana, it
+cannot be undone, and doing it twice is harmless. The token is unchanged and
+still validly signed: the chain is what says otherwise. (`revoke` in the wallet
+is a demo shortcut; in real life the issuer revokes.) The same call without the
+wallet: `curl -X POST http://127.0.0.1:8080/v1/credentials/revoke -d '{"credential":"<token>"}'`.
+
+**Untrusted issuer.** With a credential in the wallet that is granted:
+
+```bash
+curl -X POST http://127.0.0.1:8080/v1/issuer/suspend
+```
+
+`present` is now **denied (`untrusted_issuer`)**, and `/issuers` shows
+`"active": false`. A new `request` also fails (the program refuses to register
+credentials for a suspended issuer; the wallet shows an HTTP 500 for it).
+`curl -X POST http://127.0.0.1:8080/v1/issuer/reactivate` makes the same
+credential verify again. These two endpoints act on this backend's own issuer
+and exist only because the demo's backend holds the registry authority key.
+
+**Expired.** Add `CREDENTIAL_TTL=30s` to `.local/demo.env` and restart the
+backend. `request`, wait 30 seconds, `present`: **denied (`expired`)**.
+
+**Chain outage.** With a credential in the wallet, stop the validator and
+`present`: **denied (`verification_unavailable`)**, with HTTP 503. When the
+trust state cannot be read the credential is never accepted. Start the
+validator again to recover (remember that it wipes the chain, see below).
+
+The revoke and suspend endpoints are development conveniences like the
+simulated approvals and issuance: they are only registered when
+`APPROVAL_SIMULATION_ENABLED` is on, they answer 501 if no registry is
+configured, and they have no authentication yet.

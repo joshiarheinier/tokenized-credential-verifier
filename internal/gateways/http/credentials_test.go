@@ -18,6 +18,7 @@ import (
 	domaincredential "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/credential/kyc"
 	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/issuer"
+	"github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/registry"
 	domainverification "github.com/joshiarheinier/tokenized-credential-verifier/internal/domain/verification"
 	httpgateway "github.com/joshiarheinier/tokenized-credential-verifier/internal/gateways/http"
 )
@@ -68,7 +69,7 @@ func newEnv(t *testing.T, withIssuance bool) *testEnv {
 		if err != nil {
 			t.Fatal(err)
 		}
-		api.ApprovalSimulation, api.CredentialIssuance = approvals, svc
+		api.ApprovalSimulation, api.Credentials = approvals, svc
 	}
 	srv := httptest.NewServer(httpgateway.NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), api))
 	t.Cleanup(srv.Close)
@@ -301,5 +302,101 @@ func TestNonKYCCredentialTypeEndToEnd(t *testing.T) {
 	_, res = e.post(t, "/v1/credentials/verify", `{"credential":"`+silver+`"}`)
 	if res["valid"] != false || res["reason"] != "policy_not_satisfied" {
 		t.Fatalf("silver verify = %v", res)
+	}
+}
+
+// fakeCredentialService returns the configured error from every method and
+// records the issuer statuses it was asked to set.
+type fakeCredentialService struct {
+	err   error
+	calls []bool
+}
+
+func (f *fakeCredentialService) IssueFromApproval(context.Context, string) (credential.Issued, error) {
+	return credential.Issued{}, f.err
+}
+
+func (f *fakeCredentialService) Revoke(context.Context, string) error { return f.err }
+
+func (f *fakeCredentialService) SetIssuerActive(_ context.Context, active bool) error {
+	f.calls = append(f.calls, active)
+	return f.err
+}
+
+func newFakeServer(t *testing.T, svc httpgateway.CredentialService) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(httpgateway.NewRouter(slog.New(slog.NewTextHandler(io.Discard, nil)), httpgateway.API{Credentials: svc}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func postStatus(t *testing.T, url, body string) int {
+	t.Helper()
+	resp, err := http.Post(url, "application/json", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	return resp.StatusCode
+}
+
+func TestRevokeEndpointMapsOutcomesToStatuses(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want int
+	}{
+		{"revoked", nil, http.StatusOK},
+		{"not ours or expired", credential.ErrInvalidCredential, http.StatusUnprocessableEntity},
+		{"no registry configured", credential.ErrNoRegistry, http.StatusNotImplemented},
+		{"never registered", registry.ErrNotFound, http.StatusNotFound},
+		{"registry down", registry.ErrUnavailable, http.StatusServiceUnavailable},
+		{"anything else", io.ErrUnexpectedEOF, http.StatusInternalServerError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := newFakeServer(t, &fakeCredentialService{err: tc.err})
+			if got := postStatus(t, srv.URL+"/v1/credentials/revoke", `{"credential":"t"}`); got != tc.want {
+				t.Fatalf("status = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestIssuerStatusEndpoints(t *testing.T) {
+	svc := &fakeCredentialService{}
+	srv := newFakeServer(t, svc)
+
+	if code := postStatus(t, srv.URL+"/v1/issuer/suspend", ""); code != http.StatusOK {
+		t.Fatalf("suspend = %d", code)
+	}
+	if code := postStatus(t, srv.URL+"/v1/issuer/reactivate", ""); code != http.StatusOK {
+		t.Fatalf("reactivate = %d", code)
+	}
+	if len(svc.calls) != 2 || svc.calls[0] || !svc.calls[1] {
+		t.Fatalf("calls = %v, want [false true]", svc.calls)
+	}
+
+	for err, want := range map[error]int{
+		credential.ErrNoRegistry: http.StatusNotImplemented,
+		registry.ErrUnavailable:  http.StatusServiceUnavailable,
+		registry.ErrNotFound:     http.StatusNotFound,
+	} {
+		svc.err = err
+		if code := postStatus(t, srv.URL+"/v1/issuer/suspend", ""); code != want {
+			t.Errorf("%v: suspend = %d, want %d", err, code, want)
+		}
+	}
+}
+
+// With issuing configured but no registry, revoking and suspending are refused
+// as unsupported, not silently ignored.
+func TestRevokeAndSuspendNeedARegistry(t *testing.T) {
+	e := newEnv(t, true)
+	token := e.issueCredential(t, approved)
+	if code, _ := e.post(t, "/v1/credentials/revoke", `{"credential":"`+token+`"}`); code != http.StatusNotImplemented {
+		t.Fatalf("revoke = %d, want 501", code)
+	}
+	if code, _ := e.post(t, "/v1/issuer/suspend", ""); code != http.StatusNotImplemented {
+		t.Fatalf("suspend = %d, want 501", code)
 	}
 }

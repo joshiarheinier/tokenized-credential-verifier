@@ -135,3 +135,36 @@ func TestPromptRunsCommandsAndSurvivesErrors(t *testing.T) {
 		t.Errorf("want list to run once (before exit): %q", got)
 	}
 }
+
+func TestRevokeSendsTheStoredCredentialAndReportsRefusals(t *testing.T) {
+	var got string
+	status := http.StatusOK
+	issuer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/credentials/revoke" {
+			t.Errorf("unexpected call %s", r.URL.Path)
+		}
+		var req struct {
+			Credential string `json:"credential"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&req)
+		got = req.Credential
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(`{"error":"credential is not registered on chain"}`))
+	}))
+	defer issuer.Close()
+
+	dir := t.TempDir()
+	if _, err := (store{dir}).save(kycToken, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	var out bytes.Buffer
+	if err := run("revoke", []string{"-dir", dir, "-api", issuer.URL}, &out); err != nil || got != kycToken {
+		t.Fatalf("revoke: err=%v sent=%q", err, got)
+	}
+
+	status = http.StatusNotFound
+	err := run("revoke", []string{"-dir", dir, "-api", issuer.URL}, &out)
+	if err == nil || !strings.Contains(err.Error(), "not registered on chain") {
+		t.Fatalf("err = %v, want the issuer's refusal shown", err)
+	}
+}

@@ -163,7 +163,7 @@ the registry, so only issuers registered and active on chain are accepted.
 Limitation: the simulated approval store is in memory (lost on restart).
 
 To try the whole flow by hand (wallet, backend, dApp and the on-chain data), see
-[`docs/phase4_demo.md`](docs/demo_guide.md).
+[`docs/demo_guide.md`](docs/demo_guide.md).
 
 ## Project layout
 

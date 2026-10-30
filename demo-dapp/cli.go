@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 )
 
 const cliUsage = `commands:
+  verify <credential>   present a credential to the app, as a wallet would
   status   check that the credential verifier is reachable and ready
   log      show the access decisions made so far
   help     show this list
@@ -45,8 +47,19 @@ func repl(in io.Reader, out io.Writer, a *app, h *history) bool {
 	fmt.Fprintln(out, "demo-dapp: type a command (help for the list)")
 	sc := bufio.NewScanner(in)
 	for fmt.Fprint(out, "dapp> "); sc.Scan(); fmt.Fprint(out, "dapp> ") {
-		switch strings.TrimSpace(sc.Text()) {
+		command, arg, _ := strings.Cut(strings.TrimSpace(sc.Text()), " ")
+		switch command {
 		case "":
+		case "verify":
+			if arg = strings.TrimSpace(arg); arg == "" {
+				fmt.Fprintln(out, "usage: verify <credential>")
+				break
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), verifierTimeout)
+			_, resp := a.decide(ctx, arg)
+			cancel()
+			body, _ := json.Marshal(resp)
+			fmt.Fprintln(out, string(body))
 		case "help":
 			fmt.Fprintln(out, cliUsage)
 		case "status":
