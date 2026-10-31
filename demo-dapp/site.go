@@ -282,8 +282,8 @@ func reasonText(reason string) string {
 }
 
 const styleCSS = `
-:root { --bg:#f6f7f9; --card:#fff; --text:#1c2330; --muted:#5d6778; --line:#d9dee7; --accent:#4b3fd6; --accent-text:#fff; --ok:#17703b; --ok-bg:#e5f5ec; --bad:#a3262a; --bad-bg:#fbe9ea; }
-@media (prefers-color-scheme: dark) { :root { --bg:#14171d; --card:#1d222b; --text:#e8ebf1; --muted:#9aa4b5; --line:#333b49; --accent:#8f86ff; --accent-text:#14171d; --ok:#6fd49a; --ok-bg:#173325; --bad:#ff8f93; --bad-bg:#3a1c1e; } }
+:root { --bg:#fbf5ea; --card:#fffdf8; --text:#2b2118; --muted:#7a6a58; --line:#e6dccb; --accent:#c2410c; --accent-text:#fff; --ok:#17703b; --ok-bg:#e5f5ec; --bad:#a3262a; --bad-bg:#fbe9ea; }
+@media (prefers-color-scheme: dark) { :root { --bg:#1f1a14; --card:#2a231b; --text:#f1e9de; --muted:#b3a38f; --line:#4a3f33; --accent:#ffa05c; --accent-text:#1f1a14; --ok:#6fd49a; --ok-bg:#173325; --bad:#ff8f93; --bad-bg:#3a1c1e; } }
 * { box-sizing: border-box; }
 body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
 main { max-width:36rem; margin:0 auto; padding:2rem 16px; }
