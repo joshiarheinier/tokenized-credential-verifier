@@ -10,6 +10,8 @@ infrastructure for different credential products. The first credential type is
 KYC status (simulated); other uses such as ticketing or memberships are future
 work.
 
+## Rationale
+
 ### Why blockchain
 
 Credential systems without a blockchain keep the list of trusted issuers and
