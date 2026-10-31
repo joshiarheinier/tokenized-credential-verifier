@@ -188,7 +188,79 @@ func TestResponseOutcomesFromVerificationAndPolicy(t *testing.T) {
 			if err != nil || verdict.Status != tc.want || verdict.Reason != tc.reason {
 				t.Fatalf("Respond = %+v, %v, want %s (%s)", verdict, err, tc.want, tc.reason)
 			}
+			res, err := f.svc.GetChallengeResult(context.Background(), created.Challenge.ID, created.ResultSecret)
+			if err != nil || len(res.Claims) != 0 || res.Issuer != "" {
+				t.Fatalf("a %s outcome shows the application %+v, %v: it must reveal nothing about the credential", tc.want, res, err)
+			}
 		})
+	}
+}
+
+// Whoever answers first decides: a wrong answer spends the challenge, so an
+// attacker cannot keep guessing, and the right answer cannot follow it.
+func TestAFailedAttemptSpendsTheChallenge(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	created := f.create(t)
+	_, stranger, _ := ed25519.GenerateKey(rand.Reader)
+
+	bad := ed25519.Sign(stranger, []byte(domain.Message(created.Challenge, token)))
+	if v, err := f.svc.RespondChallenge(ctx, created.Challenge.ID, token, bad); err != nil || v.Status != domain.StatusRejected {
+		t.Fatalf("wrong signature = %+v, %v, want rejected", v, err)
+	}
+	if _, err := f.svc.RespondChallenge(ctx, created.Challenge.ID, token, f.sign(created.Challenge, token)); !errors.Is(err, domain.ErrAlreadyUsed) {
+		t.Fatalf("right signature after a wrong one: err = %v, want ErrAlreadyUsed", err)
+	}
+	if res, _ := f.svc.GetChallengeResult(ctx, created.Challenge.ID, created.ResultSecret); res.Status != domain.StatusRejected {
+		t.Fatalf("result = %+v, want the first, rejected outcome to stand", res)
+	}
+}
+
+// A response captured from one challenge is of no use for another.
+func TestAResponseCannotBeReplayedOnAnotherChallenge(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	first, second := f.create(t), f.create(t)
+	captured := f.sign(first.Challenge, token)
+
+	if v, err := f.svc.RespondChallenge(ctx, second.Challenge.ID, token, captured); err != nil || v.Status != domain.StatusRejected || v.Reason != string(ReasonHolderBinding) {
+		t.Fatalf("replayed response = %+v, %v, want rejected with holder_binding_failed", v, err)
+	}
+}
+
+func TestConcurrentResponsesProduceOneVerdict(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	created := f.create(t)
+	sig := f.sign(created.Challenge, token)
+
+	const attempts = 20
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	answered, spent := 0, 0
+	for range attempts {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := f.svc.RespondChallenge(ctx, created.Challenge.ID, token, sig)
+			mu.Lock()
+			defer mu.Unlock()
+			switch {
+			case err == nil:
+				answered++
+			case errors.Is(err, domain.ErrAlreadyUsed):
+				spent++
+			default:
+				t.Errorf("unexpected error: %v", err)
+			}
+		}()
+	}
+	wg.Wait()
+	if answered != 1 || spent != attempts-1 {
+		t.Fatalf("answered %d, refused as used %d, want 1 and %d", answered, spent, attempts-1)
+	}
+	if f.verifier.calls != 1 {
+		t.Fatalf("verifier called %d times, want 1", f.verifier.calls)
 	}
 }
 

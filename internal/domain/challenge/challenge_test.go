@@ -83,6 +83,11 @@ func TestVerifyHolder(t *testing.T) {
 	other, _, _ := ed25519.GenerateKey(rand.Reader)
 	otherChallenge := c
 	otherChallenge.Audience = "http://localhost:9091"
+	otherID, otherType, otherClaims, otherExpiry := c, c, c, c
+	otherID.ID = "BBBBBBBBBBBBBBBBBBBBBB"
+	otherType.CredentialType = "Membership"
+	otherClaims.Claims = []string{"over_18", "country"}
+	otherExpiry.ExpiresAt = c.ExpiresAt.Add(time.Hour)
 	for name, tc := range map[string]struct {
 		subject string
 		token   string
@@ -91,6 +96,10 @@ func TestVerifyHolder(t *testing.T) {
 		"credential bound to another key":   {HolderID(other), "token", sign(c, "token")},
 		"signature over another credential": {subject, "token", sign(c, "other-token")},
 		"signature for another audience":    {subject, "token", sign(otherChallenge, "token")},
+		"signature for another challenge":   {subject, "token", sign(otherID, "token")},
+		"signature for another type":        {subject, "token", sign(otherType, "token")},
+		"signature for other claims":        {subject, "token", sign(otherClaims, "token")},
+		"signature for another expiry":      {subject, "token", sign(otherExpiry, "token")},
 		"truncated signature":               {subject, "token", sign(c, "token")[:40]},
 		"no signature":                      {subject, "token", nil},
 		"subject is not a holder id":        {"user-1", "token", sign(c, "token")},

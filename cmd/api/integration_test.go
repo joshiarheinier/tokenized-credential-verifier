@@ -123,15 +123,7 @@ func (s *stack) serve(t *testing.T, vars map[string]string) string {
 // issue it, which registers the credential on chain.
 func (s *stack) issue(t *testing.T) string {
 	t.Helper()
-	code, sim := post(t, s.base+"/v1/approvals/simulate", `{"subject":"user-1","credential_type":"KYCStatus","outcome":"approved","claims":{"kyc_verified":true,"over_18":true,"country":"ID"}}`)
-	if code != http.StatusCreated {
-		t.Fatalf("simulate = %d %v", code, sim)
-	}
-	code, issued := post(t, s.base+"/v1/credentials", `{"approval_id":"`+sim["approval_id"].(string)+`"}`)
-	if code != http.StatusCreated {
-		t.Fatalf("issue = %d %v", code, issued)
-	}
-	return issued["credential"].(string)
+	return issueTo(t, s.base, "user-1")
 }
 
 // verify asks the verifier at base and returns its HTTP status and, for a
@@ -260,4 +252,80 @@ func TestRPCOutageNeverAcceptsACredential(t *testing.T) {
 		"APPROVAL_SIMULATION_ENABLED": "false",
 	})
 	requireRejected(t, deadRPC, token, "verification_unavailable", http.StatusServiceUnavailable)
+}
+
+// answers opens a challenge at base and answers it as holder with token,
+// returning what the wallet is told and what the application then reads.
+func answers(t *testing.T, base string, holder wallet, token string) (code int, told, read map[string]any) {
+	t.Helper()
+	id, secret := openChallenge(t, base)
+	code, told = respond(t, base, id, token, holder.sign(t, base, id, token))
+	_, read = readResult(t, base, id, secret)
+	return code, told, read
+}
+
+func requireNotVerified(t *testing.T, code int, told, read map[string]any, wantStatus, wantReason string, wantCode int) {
+	t.Helper()
+	if code != wantCode || told["status"] != wantStatus || told["reason"] != wantReason || read["status"] != wantStatus || read["claims"] != nil {
+		t.Fatalf("answer = %d %v, application reads %v, want %s (%s), HTTP %d, and no claims", code, told, read, wantStatus, wantReason, wantCode)
+	}
+}
+
+// A challenge cannot be answered with a credential the issuer has revoked, even
+// though its signature, its holder and its expiry are all fine.
+func TestRevokedCredentialCannotAnswerAChallenge(t *testing.T) {
+	s := newStack(t, nil)
+	holder := newWallet(t)
+	token := issueTo(t, s.base, holder.id())
+
+	code, told, read := answers(t, s.base, holder, token)
+	if code != http.StatusOK || told["status"] != "verified" || read["status"] != "verified" {
+		t.Fatalf("before revoking: %d %v %v, want verified", code, told, read)
+	}
+
+	if code, res := post(t, s.base+"/v1/credentials/revoke", `{"credential":"`+token+`"}`); code != http.StatusOK {
+		t.Fatalf("revoke = %d %v", code, res)
+	}
+	code, told, read = answers(t, s.base, holder, token)
+	requireNotVerified(t, code, told, read, "rejected", "revoked", http.StatusOK)
+}
+
+func TestSuspendedIssuersCredentialCannotAnswerAChallenge(t *testing.T) {
+	s := newStack(t, nil)
+	holder := newWallet(t)
+	token := issueTo(t, s.base, holder.id())
+
+	if code, res := post(t, s.base+"/v1/issuer/suspend", ""); code != http.StatusOK {
+		t.Fatalf("suspend = %d %v", code, res)
+	}
+	code, told, read := answers(t, s.base, holder, token)
+	requireNotVerified(t, code, told, read, "rejected", "untrusted_issuer", http.StatusOK)
+
+	if code, res := post(t, s.base+"/v1/issuer/reactivate", ""); code != http.StatusOK {
+		t.Fatalf("reactivate = %d %v", code, res)
+	}
+	code, told, read = answers(t, s.base, holder, token)
+	if code != http.StatusOK || told["status"] != "verified" || read["status"] != "verified" {
+		t.Fatalf("after reactivating: %d %v %v, want verified", code, told, read)
+	}
+}
+
+// With the chain unreadable the answer is "unavailable", never "verified".
+func TestRPCOutageNeverVerifiesAChallengeAnswer(t *testing.T) {
+	s := newStack(t, nil)
+	holder := newWallet(t)
+	token := issueTo(t, s.base, holder.id())
+
+	deadRPC := s.serve(t, map[string]string{
+		"APP_ENV":                     "test",
+		"HTTP_ADDR":                   "127.0.0.1:0",
+		"ISSUER_ID":                   s.issuerID,
+		"ISSUER_SIGNING_KEY_SEED":     s.seed,
+		"SOLANA_RPC_URL":              "http://127.0.0.1:1",
+		"SOLANA_PROGRAM_ID":           s.chain.ProgramID,
+		"SOLANA_REQUEST_TIMEOUT":      "2s",
+		"APPROVAL_SIMULATION_ENABLED": "false",
+	})
+	code, told, read := answers(t, deadRPC, holder, token)
+	requireNotVerified(t, code, told, read, "unavailable", "verification_unavailable", http.StatusServiceUnavailable)
 }
